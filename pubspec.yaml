@@ -2,7 +2,8 @@ name: plantao_ret
 description: Sistema de Plantões RET
 publish_to: "none"
 
-version: 1.0.0+1
+# Atualize esta versão a cada nova publicação
+version: 2.0.0+1
 
 environment:
   sdk: ">=3.12.0 <4.0.0"
@@ -35,10 +36,10 @@ flutter_launcher_icons:
   android: true
   ios: true
 
-  image_path: "assets/icon/app_icon.png"
+  image_path: assets/icon/app_icon.png
 
   # Android Adaptive Icon
-  adaptive_icon_foreground: "assets/icon/app_icon.png"
+  adaptive_icon_foreground: assets/icon/app_icon.png
   adaptive_icon_background: "#07152B"
 
   min_sdk_android: 21

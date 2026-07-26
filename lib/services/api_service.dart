@@ -292,6 +292,44 @@ class ApiService {
     }
   }
 
+// ===================================================
+// DADOS INICIAIS (AGENTE + VAGAS + INSCRIÇÕES)
+// ===================================================
+
+static Future<Map<String, dynamic>> buscarInicial({
+  required String codigo,
+}) async {
+  try {
+    final url = Uri.parse(
+      "$baseUrl"
+      "?tipo=inicial"
+      "&codigo=$codigo"
+      "&t=${DateTime.now().millisecondsSinceEpoch}",
+    );
+
+    final response = await http
+        .get(url)
+        .timeout(timeout);
+
+    if (response.statusCode != 200) {
+      throw Exception(
+        'Erro ao buscar dados iniciais.',
+      );
+    }
+
+    final body = jsonDecode(response.body);
+
+    return Map<String, dynamic>.from(body);
+  } on TimeoutException {
+    throw Exception(
+      'Tempo de conexão esgotado.',
+    );
+  } catch (e) {
+    throw Exception(
+      'Erro ao buscar dados iniciais.\n$e',
+    );
+  }
+}
   // ===================================================
   // RELATÓRIO PDF
   // ===================================================

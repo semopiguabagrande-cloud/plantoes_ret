@@ -23,8 +23,12 @@ class _HomeScreenState extends State<HomeScreen> {
 
   List<Map<String, dynamic>> inscricoesOriginais = [];
 
-  bool carregando = true;
-  bool salvando = false;
+ bool carregando = true;
+
+// usada somente na sincronização automática
+bool sincronizando = false;
+
+bool salvando = false;
 
   late int limitePlantao;
 
@@ -55,7 +59,9 @@ class _HomeScreenState extends State<HomeScreen> {
           return;
         }
 
-        await carregarVagas();
+        await carregarVagas(
+  mostrarLoading: false,
+);
       },
     );
   }
@@ -66,10 +72,9 @@ class _HomeScreenState extends State<HomeScreen> {
     super.dispose();
   }
 
-  Future<void> iniciar() async {
-    await carregarVagas();
-    await carregarMinhasInscricoes();
-  }
+ Future<void> iniciar() async {
+  await carregarInicial();
+}
 
   Future<void> carregarMinhasInscricoes() async {
     try {
@@ -92,14 +97,70 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  Future<void> carregarVagas() async {
-    try {
-      if (mounted) {
-        setState(() {
-          carregando = true;
-        });
-      }
+ Future<void> carregarInicial({
+  bool mostrarLoading = true,
+}) async {
+  try {
+    if (mounted) {
+  setState(() {
+    if (mostrarLoading) {
+      carregando = true;
+    } else {
+      sincronizando = true;
+    }
+  });
+}
 
+    final dados = await ApiService.buscarInicial(
+      codigo: widget.agente['codigo'].toString(),
+    );
+
+    if (!mounted) return;
+
+    setState(() {
+  vagas = List<dynamic>.from(dados['vagas']);
+
+  selecionados = List<Map<String, dynamic>>.from(
+    (dados['minhas'] as List).map(
+      (e) => Map<String, dynamic>.from(e),
+    ),
+  );
+
+  inscricoesOriginais =
+      List<Map<String, dynamic>>.from(selecionados);
+
+  carregando = false;
+  sincronizando = false;
+});
+  } catch (e) {
+    if (!mounted) return;
+
+    setState(() {
+      carregando = false;
+      sincronizando = false;
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(e.toString()),
+      ),
+    );
+  }
+}
+
+ Future<void> carregarVagas({
+  bool mostrarLoading = true,
+}) async {
+    try {
+     if (mounted) {
+  setState(() {
+    if (mostrarLoading) {
+      carregando = true;
+    } else {
+      sincronizando = true;
+    }
+  });
+}
       final dados = await ApiService.buscarVagas(
         ano: anoAtual,
         mes: mesAtual,
@@ -107,16 +168,18 @@ class _HomeScreenState extends State<HomeScreen> {
 
       if (!mounted) return;
 
-      setState(() {
-        vagas = dados;
-        carregando = false;
-      });
+     setState(() {
+  vagas = dados;
+  carregando = false;
+  sincronizando = false;
+});
     } catch (e) {
       if (!mounted) return;
 
       setState(() {
-        carregando = false;
-      });
+  carregando = false;
+  sincronizando = false;
+});
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -175,15 +238,19 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> salvarEscolhas() async {
-    if (salvando) return;
+  if (salvando) return;
 
-    setState(() {
-      salvando = true;
-    });
+  setState(() {
+    salvando = true;
+  });
 
-    try {
-      // atualização imediata
-      await carregarVagas();
+  try {
+
+    final cronometro = Stopwatch()..start();
+  // atualização imediata (sem tela de carregamento)
+await carregarVagas(
+  mostrarLoading: false,
+);
 
       final adicionar = selecionados.where(
         (item) {
@@ -257,6 +324,10 @@ class _HomeScreenState extends State<HomeScreen> {
         );
       }
 
+      debugPrint(
+  'Cancelar: ${cronometro.elapsedMilliseconds} ms',
+);
+
       if (adicionar.isNotEmpty) {
         final resposta =
             await ApiService.salvarInscricao(
@@ -269,6 +340,9 @@ class _HomeScreenState extends State<HomeScreen> {
           nome: widget.agente['nome'],
           datas: adicionar,
         );
+        debugPrint(
+  'Salvar API: ${cronometro.elapsedMilliseconds} ms',
+);
 
         if (resposta['success'] != true) {
           final dataErro =
@@ -289,21 +363,20 @@ class _HomeScreenState extends State<HomeScreen> {
               );
             });
           }
+await carregarInicial(
+  mostrarLoading: false,
+);
 
-          await carregarMinhasInscricoes();
-          await carregarVagas();
-
+debugPrint(
+  'Carregar Inicial (erro): ${cronometro.elapsedMilliseconds} ms',
+);
           if (!mounted) return;
 
-          setState(() {});
-
-          ScaffoldMessenger.of(context)
-              .showSnackBar(
+          ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               backgroundColor: Colors.red,
               content: Text(
-                resposta['mensagem'] ??
-                    'Erro ao salvar.',
+                resposta['mensagem'] ?? 'Erro ao salvar.',
               ),
             ),
           );
@@ -312,22 +385,30 @@ class _HomeScreenState extends State<HomeScreen> {
             salvando = false;
           });
 
+          debugPrint(
+            'TOTAL (erro): ${cronometro.elapsedMilliseconds} ms',
+          );
+
           return;
         }
       }
 
-      await carregarMinhasInscricoes();
-      await carregarVagas();
+  await carregarInicial(
+  mostrarLoading: false,
+);
 
-      if (!mounted) return;
-
-      setState(() {});
-
+debugPrint(
+  'Carregar Inicial (sucesso): ${cronometro.elapsedMilliseconds} ms',
+);
       if (!mounted) return;
 
       setState(() {
         salvando = false;
       });
+
+      debugPrint(
+        'TOTAL (sucesso): ${cronometro.elapsedMilliseconds} ms',
+      );
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
