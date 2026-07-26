@@ -3,7 +3,7 @@ description: Sistema de Plantões RET
 publish_to: "none"
 
 # Atualize esta versão a cada nova publicação
-version: 2.0.0+1
+version: 2.0.0+2
 
 environment:
   sdk: ">=3.12.0 <4.0.0"

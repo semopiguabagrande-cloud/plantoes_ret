@@ -429,20 +429,20 @@ class _InscricoesScreenState
                                             return ListTile(
                                               isThreeLine:
                                                   true,
-                                              leading:
-                                                  CircleAvatar(
-                                                backgroundColor:
-                                                    Colors.blue,
-                                                child:
-                                                    Text(
-                                                  e['nome']
-                                                      .toString()
-                                                      .substring(
-                                                        0,
-                                                        1,
-                                                      ),
-                                                ),
-                                              ),
+                                              leading: CircleAvatar(
+  backgroundColor: Colors.blue,
+  child: Text(
+    (() {
+      final nome = (e['nome'] ?? '')
+          .toString()
+          .trim();
+
+      return nome.isEmpty
+          ? '?'
+          : nome.substring(0, 1).toUpperCase();
+    })(),
+  ),
+),
                                               title:
                                                   Text(
                                                 e['nome']
