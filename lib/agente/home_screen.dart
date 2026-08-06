@@ -435,151 +435,176 @@ debugPrint(
   }
 
   @override
-  Widget build(
-    BuildContext context,
-  ) {
-    return Scaffold(
-      backgroundColor: const Color(0xff021426),
-      appBar: AppBar(
-        backgroundColor: const Color(0xff00162f),
-        centerTitle: true,
-        title: const Text(
-          'PLANTÕES RET',
-        ),
-      ),
-      body: carregando
-          ? const Center(
-              child: CircularProgressIndicator(),
-            )
-          : Padding(
-              padding: EdgeInsets.all(
-                desktop ? 30 : 20,
-              ),
-              child: Column(
-                children: [
-                  Card(
-                    color: Colors.white10,
-                    child: Padding(
-                      padding: const EdgeInsets.all(20),
-                      child: Column(
-                        children: [
-                          Text(
-                            widget.agente['nome'] ?? '',
-                            style: TextStyle(
-                              fontSize:
-                                  desktop ? 30 : 24,
-                              fontWeight:
-                                  FontWeight.bold,
-                            ),
-                          ),
-                          const SizedBox(
-                            height: 10,
-                          ),
-                          Text(
-                            'Matrícula: '
-                            '${widget.agente['matricula']}',
-                          ),
-                          const SizedBox(
-                            height: 10,
-                          ),
-                          Text(
-                            'Plantões '
-                            '${selecionados.length}/$limitePlantao',
-                            style: const TextStyle(
-                              color: Colors.amber,
-                              fontWeight:
-                                  FontWeight.bold,
-                            ),
-                          ),
-                          const SizedBox(
-                            height: 20,
-                          ),
-                          Wrap(
-                            spacing: 8,
-                            runSpacing: 8,
-                            children:
-                                selecionados.map((e) {
-                              return Chip(
-                                backgroundColor:
-                                    Colors.white10,
-                                label: Text(
-                                  '${e['data']} (${e['turno']})',
-                                  style:
-                                      const TextStyle(
-                                    color:
-                                        Colors.white,
-                                  ),
-                                ),
-                              );
-                            }).toList(),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(
-                    height: 20,
-                  ),
-                  Expanded(
-                    child: desktop
-                        ? GridView.builder(
-                            gridDelegate:
-                                const SliverGridDelegateWithFixedCrossAxisCount(
-                              crossAxisCount: 2,
-                              childAspectRatio: 1.7,
-                              crossAxisSpacing:
-                                  15,
-                              mainAxisSpacing:
-                                  15,
-                            ),
-                            itemCount:
-                                vagas.length,
-                            itemBuilder:
-                                montarCard,
-                          )
-                        : ListView.builder(
-                            itemCount:
-                                vagas.length,
-                            itemBuilder:
-                                montarCard,
-                          ),
-                  ),
-                  const SizedBox(
-                    height: 10,
-                  ),
-                  Padding(
-                    padding: EdgeInsets.only(
-                      bottom:
-                          MediaQuery.of(context)
-                                  .padding
-                                  .bottom +
-                              10,
-                    ),
-                    child: SizedBox(
-                      width: double.infinity,
-                      height: 60,
-                      child: ElevatedButton(
-                        onPressed: salvando
-                            ? null
-                            : salvarEscolhas,
-                        child: salvando
-                            ? const SizedBox(
-                                height: 30,
-                                width: 30,
-                                child:
-                                    CircularProgressIndicator(),
-                              )
-                            : const Text(
-                                'SALVAR ALTERAÇÕES',
-                              ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+Widget build(BuildContext context) {
+  return Scaffold(
+    backgroundColor: const Color(0xff021426),
+    appBar: AppBar(
+      backgroundColor: const Color(0xff00162f),
+      centerTitle: true,
+      title: const Text('PLANTÕES RET'),
+    ),
+    body: carregando
+        ? const Center(
+            child: CircularProgressIndicator(),
+          )
+        : Padding(
+            padding: EdgeInsets.all(
+              desktop ? 30 : 20,
             ),
-    );
-  }
+            child: Column(
+              children: [
+                Card(
+                  color: Colors.white10,
+                  child: Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: Column(
+                      children: [
+                        Text(
+                          widget.agente['nome'] ?? '',
+                          style: TextStyle(
+                            fontSize: desktop ? 30 : 24,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        Text(
+                          'Matrícula: ${widget.agente['matricula']}',
+                        ),
+                        const SizedBox(height: 10),
+                        Text(
+                          'Plantões ${selecionados.length}/$limitePlantao',
+                          style: const TextStyle(
+                            color: Colors.amber,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+
+                        Container(
+                          width: double.infinity,
+                          height: 58,
+                          alignment: Alignment.centerLeft,
+                          child: selecionados.isEmpty
+                              ? const Center(
+                                  child: Text(
+                                    'Nenhum plantão selecionado',
+                                    style: TextStyle(
+                                      color: Colors.white70,
+                                    ),
+                                  ),
+                                )
+                              : Builder(
+                                  builder: (context) {
+                                    final lista =
+                                        List<Map<String, dynamic>>.from(
+                                            selecionados);
+
+                                    lista.sort((a, b) {
+                                      final da = DateTime.parse(
+                                        a['data']
+                                            .toString()
+                                            .split('/')
+                                            .reversed
+                                            .join('-'),
+                                      );
+
+                                      final db = DateTime.parse(
+                                        b['data']
+                                            .toString()
+                                            .split('/')
+                                            .reversed
+                                            .join('-'),
+                                      );
+
+                                      return da.compareTo(db);
+                                    });
+
+                                    return ListView.separated(
+                                      scrollDirection: Axis.horizontal,
+                                      physics:
+                                          const BouncingScrollPhysics(),
+                                      itemCount: lista.length,
+                                      separatorBuilder: (_, __) =>
+                                          const SizedBox(width: 8),
+                                      itemBuilder: (context, index) {
+                                        final e = lista[index];
+
+                                        return Center(
+                                          child: Chip(
+                                            backgroundColor:
+                                                Colors.white10,
+                                            label: Text(
+                                              '${e['data']} (${e['turno']})',
+                                              overflow:
+                                                  TextOverflow.ellipsis,
+                                              style: const TextStyle(
+                                                color: Colors.white,
+                                              ),
+                                            ),
+                                          ),
+                                        );
+                                      },
+                                    );
+                                  },
+                                ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 20),
+
+                Expanded(
+                  child: desktop
+                      ? GridView.builder(
+                          gridDelegate:
+                              const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 2,
+                            childAspectRatio: 1.7,
+                            crossAxisSpacing: 15,
+                            mainAxisSpacing: 15,
+                          ),
+                          itemCount: vagas.length,
+                          itemBuilder: montarCard,
+                        )
+                      : ListView.builder(
+                          itemCount: vagas.length,
+                          itemBuilder: montarCard,
+                        ),
+                ),
+
+                const SizedBox(height: 10),
+
+                Padding(
+                  padding: EdgeInsets.only(
+                    bottom:
+                        MediaQuery.of(context).padding.bottom + 10,
+                  ),
+                  child: SizedBox(
+                    width: double.infinity,
+                    height: 60,
+                    child: ElevatedButton(
+                      onPressed:
+                          salvando ? null : salvarEscolhas,
+                      child: salvando
+                          ? const SizedBox(
+                              height: 30,
+                              width: 30,
+                              child:
+                                  CircularProgressIndicator(),
+                            )
+                          : const Text(
+                              'SALVAR ALTERAÇÕES',
+                            ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+  );
+}
     Widget montarCard(
     BuildContext context,
     int i,

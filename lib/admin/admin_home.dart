@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../screens/login_screen.dart';
 import 'inscricoes_screen.dart';
 import 'relatorios_screen.dart';
+import 'lista_presenca_screen.dart';
 
 class AdminHome extends StatelessWidget {
   const AdminHome({
@@ -164,20 +165,37 @@ class AdminHome extends StatelessWidget {
                     height: 20,
                   ),
 
-                  /// RELATÓRIO PDF
+                                 /// RELATÓRIO PDF
 
                   botao(
-                    icone:
-                        Icons.picture_as_pdf,
-                    titulo:
-                        'RELATÓRIO GERAL PDF',
+                    icone: Icons.picture_as_pdf,
+                    titulo: 'RELATÓRIO GERAL PDF',
                     onTap: () {
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder:
-                              (_) =>
-                                  const RelatoriosScreen(),
+                          builder: (_) =>
+                              const RelatoriosScreen(),
+                        ),
+                      );
+                    },
+                  ),
+
+                  const SizedBox(
+                    height: 20,
+                  ),
+
+                  /// LISTA DE PRESENÇA
+
+                  botao(
+                    icone: Icons.fact_check,
+                    titulo: 'LISTA DE PRESENÇA',
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) =>
+                              const ListaPresencaScreen(),
                         ),
                       );
                     },
