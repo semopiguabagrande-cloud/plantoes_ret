@@ -30,7 +30,6 @@ class ApiService {
   // ===================================================
 
   static String? _codigoSessao;
-
   static String? _sessionId;
 
   static String? get codigoSessao =>
@@ -47,11 +46,6 @@ class ApiService {
 
   // ===================================================
   // INICIALIZAR / RECUPERAR SESSÃO LOCAL
-  // ===================================================
-  //
-  // Deve ser chamado antes de tentar recuperar a sessão
-  // no início do aplicativo.
-  //
   // ===================================================
 
   static Future<void> inicializarSessao() async {
@@ -73,15 +67,10 @@ class ApiService {
           codigo.isNotEmpty &&
           sessao != null &&
           sessao.isNotEmpty) {
-        _codigoSessao =
-            codigo;
-
-        _sessionId =
-            sessao;
+        _codigoSessao = codigo;
+        _sessionId = sessao;
       }
     } catch (e) {
-      // Não interrompe o aplicativo caso
-      // haja algum problema no armazenamento local.
       _codigoSessao = null;
       _sessionId = null;
     }
@@ -110,7 +99,7 @@ class ApiService {
         _sessionId!,
       );
     } catch (e) {
-      // Não impede o funcionamento da sessão em memória.
+      // A sessão continua funcionando em memória.
     }
   }
 
@@ -205,9 +194,8 @@ class ApiService {
           _sessionId =
               novaSessao.toString();
 
-          // IMPORTANTE:
-          // salva a sessão para sobreviver ao fechamento
-          // do aplicativo.
+          // Salva para sobreviver ao fechamento
+          // da aba/navegador.
           await _salvarSessaoLocal();
         }
 
@@ -246,21 +234,11 @@ class ApiService {
   // ===================================================
   // RECUPERAR SESSÃO
   // ===================================================
-  //
-  // Recupera a sessão que já está registrada
-  // no servidor para este agente.
-  //
-  // IMPORTANTE:
-  // esta função deve ser usada somente no mesmo
-  // dispositivo que possui os dados persistidos.
-  //
-  // ===================================================
 
   static Future<Map<String, dynamic>>
       recuperarSessao() async {
     try {
-      // Primeiro recupera os dados salvos
-      // no armazenamento local.
+      // Carrega a sessão salva no navegador.
       await inicializarSessao();
 
       if (!possuiSessao) {
@@ -273,7 +251,7 @@ class ApiService {
       }
 
       // =================================================
-      // TESTA A SESSÃO EXISTENTE
+      // CONFIRMA COM O SERVIDOR
       // =================================================
 
       final ativa =
@@ -291,7 +269,7 @@ class ApiService {
       }
 
       // =================================================
-      // BUSCA NOVAMENTE OS DADOS DO AGENTE
+      // BUSCA OS DADOS NOVAMENTE
       // =================================================
 
       final codigo =
@@ -794,13 +772,8 @@ class ApiService {
 
       if (resultado['success'] != true) {
         await limparSessao();
-
         return false;
       }
-
-      // =================================================
-      // SESSÃO CONTINUA VÁLIDA
-      // =================================================
 
       return true;
     } catch (e) {
@@ -865,7 +838,6 @@ class ApiService {
 
       if (resultado['success'] == true) {
         await limparSessao();
-
         return true;
       }
 
