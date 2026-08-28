@@ -24,8 +24,12 @@ class _LoginScreenState
 
   bool carregando = false;
 
-  /// controla quando o card aparece
+  /// Controla quando o card de login aparece.
   bool mostrarLogin = false;
+
+  // ===================================================
+  // INIT
+  // ===================================================
 
   @override
   void initState() {
@@ -45,30 +49,41 @@ class _LoginScreenState
     );
   }
 
+  // ===================================================
+  // DISPOSE
+  // ===================================================
+
   @override
   void dispose() {
     _codigoController.dispose();
     super.dispose();
   }
 
-  Future<void> fazerLogin() async {
-  if (carregando) return;
+  // ===================================================
+  // LOGIN
+  // ===================================================
 
-  final codigo =
-      _codigoController.text.trim();
+  Future<void> fazerLogin() async {
+    // Impede dois cliques simultâneos.
+    if (carregando) {
+      return;
+    }
+
+    final codigo =
+        _codigoController.text.trim();
+
+    // =================================================
+    // CÓDIGO VAZIO
+    // =================================================
 
     if (codigo.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(
+      ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          backgroundColor:
-              Colors.red,
+          backgroundColor: Colors.red,
           content: Text(
             'Informe o código.',
             style: TextStyle(
-              color:
-                  Colors.white,
+              color: Colors.white,
             ),
           ),
         ),
@@ -77,40 +92,74 @@ class _LoginScreenState
       return;
     }
 
+    // =================================================
+    // SEGURANÇA LOCAL
+    // =================================================
+    //
+    // Se este aplicativo já possui uma sessão,
+    // não devemos tentar criar outra.
+    //
+    // Isso normalmente acontece se o usuário voltou
+    // para a tela de login sem fazer logout.
+    // =================================================
+
+    if (ApiService.possuiSessao) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          backgroundColor: Colors.orange,
+          duration: Duration(seconds: 5),
+          content: Text(
+            'Este aplicativo já possui uma sessão ativa. '
+            'Faça logout antes de entrar novamente.',
+            style: TextStyle(
+              color: Colors.white,
+            ),
+          ),
+        ),
+      );
+
+      return;
+    }
+
+    // =================================================
+    // INICIA LOGIN
+    // =================================================
+
     try {
       setState(() {
         carregando = true;
       });
 
       final agente =
-          await ApiService
-              .buscarAgente(
+          await ApiService.buscarAgente(
         codigo,
       );
 
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
       setState(() {
         carregando = false;
       });
 
-      if (agente['success'] !=
-          true) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(
+      // =================================================
+      // LOGIN RECUSADO
+      // =================================================
+
+      if (agente['success'] != true) {
+        ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            backgroundColor:
-                Colors.red,
+            backgroundColor: Colors.red,
+            duration: const Duration(
+              seconds: 5,
+            ),
             content: Text(
-              agente[
-                          'mensagem']
+              agente['mensagem']
                       ?.toString() ??
                   'Agente não encontrado.',
-              style:
-                  const TextStyle(
-                color:
-                    Colors.white,
+              style: const TextStyle(
+                color: Colors.white,
               ),
             ),
           ),
@@ -119,14 +168,22 @@ class _LoginScreenState
         return;
       }
 
+      // =================================================
+      // TIPO DO USUÁRIO
+      // =================================================
+
       final tipo =
           agente['tipo']
                   ?.toString()
+                  .trim()
                   .toUpperCase() ??
               'AGENTE';
 
-      if (tipo ==
-          'ADMIN') {
+      // =================================================
+      // ADMIN
+      // =================================================
+
+      if (tipo == 'ADMIN') {
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(
@@ -138,38 +195,73 @@ class _LoginScreenState
         return;
       }
 
+      // =================================================
+      // AGENTE NORMAL
+      // =================================================
+      //
+      // Um agente normal precisa obrigatoriamente
+      // possuir SESSION_ID.
+      //
+      // Se não possuir, não entramos no aplicativo.
+      // =================================================
+
+      final sessionId =
+          agente['sessionId'];
+
+      if (sessionId == null ||
+          sessionId.toString().trim().isEmpty) {
+        // Garante que não fique nenhuma sessão local
+        // incompleta.
+        ApiService.limparSessao();
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            backgroundColor: Colors.red,
+            duration: Duration(seconds: 5),
+            content: Text(
+              'Não foi possível iniciar uma sessão segura. '
+              'Tente novamente.',
+              style: TextStyle(
+                color: Colors.white,
+              ),
+            ),
+          ),
+        );
+
+        return;
+      }
+
+      // =================================================
+      // VAI PARA AVISO
+      // =================================================
+
       Navigator.pushReplacement(
-  context,
-  MaterialPageRoute(
-    builder: (_) =>
-        AvisoScreen(
-      agente: agente,
-    ),
-  ),
-);
+        context,
+        MaterialPageRoute(
+          builder: (_) => AvisoScreen(
+            agente: agente,
+          ),
+        ),
+      );
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
       setState(() {
         carregando = false;
       });
 
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(
+      ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          backgroundColor:
-              Colors.red,
-          duration:
-              const Duration(
+          backgroundColor: Colors.red,
+          duration: const Duration(
             seconds: 5,
           ),
           content: Text(
             e.toString(),
-            style:
-                const TextStyle(
-              color:
-                  Colors.white,
+            style: const TextStyle(
+              color: Colors.white,
             ),
           ),
         ),
@@ -177,39 +269,29 @@ class _LoginScreenState
     }
   }
 
+  // ===================================================
+  // BUILD
+  // ===================================================
+
   @override
   Widget build(
     BuildContext context,
   ) {
     return AnimatedOpacity(
-      duration:
-          const Duration(
+      duration: const Duration(
         milliseconds: 2200,
       ),
-      curve:
-          Curves.easeInOut,
-      opacity:
-          mostrarLogin
-              ? 1
-              : 0,
-      child:
-          AnimatedScale(
-        duration:
-            const Duration(
+      curve: Curves.easeInOut,
+      opacity: mostrarLogin ? 1 : 0,
+      child: AnimatedScale(
+        duration: const Duration(
           milliseconds: 2200,
         ),
-        curve:
-            Curves.easeOutBack,
-        scale:
-            mostrarLogin
-                ? 1
-                : 0.85,
-        child:
-            IgnorePointer(
-          ignoring:
-              !mostrarLogin,
-          child:
-              LoginCard(
+        curve: Curves.easeOutBack,
+        scale: mostrarLogin ? 1 : 0.85,
+        child: IgnorePointer(
+          ignoring: !mostrarLogin,
+          child: LoginCard(
             controller:
                 _codigoController,
             carregando:

@@ -15,6 +15,7 @@ dependencies:
   cupertino_icons: ^1.0.8
   http: ^1.6.0
   intl: ^0.20.2
+  shared_preferences: ^2.5.3
 
   # PDF
   pdf: ^3.11.1
