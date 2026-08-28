@@ -45,7 +45,7 @@ class _LoginScreenState
   Future<void> _inicializar() async {
     try {
       // =================================================
-      // CARREGA SESSÃO SALVA NO NAVEGADOR
+      // CARREGA SESSÃO SALVA
       // =================================================
 
       await ApiService.inicializarSessao();
@@ -83,7 +83,7 @@ class _LoginScreenState
       );
 
       // =================================================
-      // TENTA RECUPERAR
+      // RECUPERA SESSÃO
       // =================================================
 
       final resultado =
@@ -162,7 +162,7 @@ class _LoginScreenState
         }
 
         // =================================================
-        // SESSÃO EXISTE MAS DADOS ESTÃO INCOMPLETOS
+        // SESSÃO EXISTE, MAS AGENTE NÃO VEIO
         // =================================================
 
         debugPrint(
@@ -170,7 +170,66 @@ class _LoginScreenState
         );
 
         await ApiService.limparSessao();
+
+        if (!mounted) return;
+
+        await _mostrarLogin();
+
+        return;
       }
+
+      // =================================================
+      // SERVIDOR DISSE EXPLICITAMENTE QUE EXPIROU
+      // =================================================
+
+      if (resultado['sessaoExpirada'] == true) {
+        debugPrint(
+          'Sessão anterior não é mais válida.',
+        );
+
+        // Normalmente o próprio ApiService
+        // já apagou a sessão.
+        await ApiService.limparSessao();
+
+        if (!mounted) return;
+
+        await _mostrarLogin();
+
+        return;
+      }
+
+      // =================================================
+      // ERRO DE CONEXÃO
+      //
+      // NÃO APAGA A SESSÃO.
+      //
+      // Mostra o login, mas a sessão antiga continua
+      // salva. O botão poderá tentar recuperar novamente.
+      // =================================================
+
+      if (resultado['erroConexao'] == true) {
+        debugPrint(
+          'Não foi possível verificar a sessão agora.',
+        );
+
+        if (!mounted) return;
+
+        await _mostrarLogin();
+
+        return;
+      }
+
+      // =================================================
+      // OUTRO ERRO
+      // =================================================
+
+      debugPrint(
+        'Resposta inesperada na recuperação: $resultado',
+      );
+
+      if (!mounted) return;
+
+      await _mostrarLogin();
     } catch (e) {
       debugPrint(
         'Erro durante recuperação da sessão: $e',
@@ -179,14 +238,13 @@ class _LoginScreenState
       // =================================================
       // IMPORTANTE
       //
-      // Não apagamos automaticamente uma sessão local
-      // somente porque houve erro de conexão.
+      // NÃO apagamos a sessão local por erro de conexão.
       // =================================================
+
+      if (!mounted) return;
+
+      await _mostrarLogin();
     }
-
-    if (!mounted) return;
-
-    await _mostrarLogin();
   }
 
   // ===================================================
@@ -226,7 +284,7 @@ class _LoginScreenState
   }
 
   // ===================================================
-  // LOGIN
+  // LOGIN / TENTATIVA DE RECUPERAÇÃO
   // ===================================================
 
   Future<void> fazerLogin() async {
@@ -255,6 +313,172 @@ class _LoginScreenState
       return;
     }
 
+    // =================================================
+    // EXISTE SESSÃO SALVA
+    //
+    // PRIMEIRO TENTA RECUPERAR.
+    //
+    // NÃO cria outra sessão enquanto a anterior
+    // ainda existir.
+    // =================================================
+
+    if (ApiService.possuiSessao) {
+      debugPrint(
+        'Existe sessão salva. Tentando recuperar...',
+      );
+
+      setState(() {
+        carregando = true;
+        recuperandoSessao = true;
+      });
+
+      try {
+        final resultado =
+            await ApiService.recuperarSessao();
+
+        if (!mounted) return;
+
+        setState(() {
+          carregando = false;
+          recuperandoSessao = false;
+        });
+
+        // =============================================
+        // RECUPEROU
+        // =============================================
+
+        if (resultado['success'] == true) {
+          final agente =
+              resultado['agente'];
+
+          if (agente is Map) {
+            final agenteMap =
+                Map<String, dynamic>.from(
+              agente,
+            );
+
+            final tipo =
+                agenteMap['tipo']
+                        ?.toString()
+                        .trim()
+                        .toUpperCase() ??
+                    'AGENTE';
+
+            // ===========================================
+            // ADMIN
+            // ===========================================
+
+            if (tipo == 'ADMIN') {
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(
+                  builder: (_) =>
+                      const AdminHome(),
+                ),
+              );
+
+              return;
+            }
+
+            // ===========================================
+            // AGENTE
+            // ===========================================
+
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(
+                builder: (_) =>
+                    AvisoScreen(
+                  agente: agenteMap,
+                ),
+              ),
+            );
+
+            return;
+          }
+        }
+
+        // =============================================
+        // SESSÃO EXPIROU
+        // =============================================
+
+        if (resultado['sessaoExpirada'] == true) {
+          await ApiService.limparSessao();
+
+          if (!mounted) return;
+
+          setState(() {
+            mostrarLogin = true;
+          });
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              backgroundColor:
+                  Colors.orange,
+              content: Text(
+                'A sessão anterior foi encerrada. '
+                'Faça login novamente.',
+                style: TextStyle(
+                  color: Colors.white,
+                ),
+              ),
+            ),
+          );
+
+          return;
+        }
+
+        // =============================================
+        // ERRO DE CONEXÃO
+        //
+        // Mantém sessão salva.
+        // =============================================
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            backgroundColor:
+                Colors.orange,
+            content: Text(
+              'Não foi possível verificar a sessão. '
+              'Tente novamente.',
+              style: TextStyle(
+                color: Colors.white,
+              ),
+            ),
+          ),
+        );
+
+        return;
+      } catch (e) {
+        if (!mounted) return;
+
+        setState(() {
+          carregando = false;
+          recuperandoSessao = false;
+        });
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor:
+                Colors.orange,
+            content: Text(
+              'Não foi possível recuperar a sessão. '
+              'Tente novamente.',
+              style: const TextStyle(
+                color: Colors.white,
+              ),
+            ),
+          ),
+        );
+
+        return;
+      }
+    }
+
+    // =================================================
+    // CÓDIGO
+    // =================================================
+
     final codigo =
         _codigoController.text.trim();
 
@@ -280,32 +504,7 @@ class _LoginScreenState
     }
 
     // =================================================
-    // EXISTE SESSÃO LOCAL
-    // =================================================
-
-    if (ApiService.possuiSessao) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          backgroundColor:
-              Colors.orange,
-          duration:
-              Duration(seconds: 5),
-          content: Text(
-            'Este navegador já possui uma sessão ativa. '
-            'Aguarde a recuperação da sessão ou utilize '
-            'SAIR no aplicativo anterior.',
-            style: TextStyle(
-              color: Colors.white,
-            ),
-          ),
-        ),
-      );
-
-      return;
-    }
-
-    // =================================================
-    // LOGIN
+    // LOGIN NORMAL
     // =================================================
 
     try {
