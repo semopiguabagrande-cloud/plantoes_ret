@@ -40,6 +40,7 @@ class _HomeScreenState extends State<HomeScreen> {
   late String mesAtual;
 
   Timer? _timerAtualizacao;
+  bool _atualizandoVagas = false;
 
   bool get desktop =>
       MediaQuery.of(context).size.width > 800;
@@ -69,23 +70,25 @@ class _HomeScreenState extends State<HomeScreen> {
     iniciar();
 
     _timerAtualizacao = Timer.periodic(
-      const Duration(seconds: 30),
-      (_) async {
-        if (!mounted) return;
+  const Duration(seconds: 5),
+  (_) async {
+    if (!mounted || saindo) return;
 
-        if (salvando || saindo) {
-          return;
-        }
+    if (salvando || _atualizandoVagas) {
+      return;
+    }
 
-        await manterSessaoAtiva();
+    _atualizandoVagas = true;
 
-        if (!mounted || saindo) return;
-
-        await carregarVagas(
-          mostrarLoading: false,
-        );
-      },
-    );
+    try {
+      await carregarVagas(
+        mostrarLoading: false,
+      );
+    } finally {
+      _atualizandoVagas = false;
+    }
+  },
+);
   }
 
   // ===================================================
@@ -495,52 +498,52 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   // ===================================================
-  // CARREGAR VAGAS
-  // ===================================================
+// CARREGAR VAGAS
+// ===================================================
 
-  Future<void> carregarVagas({
-    bool mostrarLoading = true,
-  }) async {
-    if (saindo) return;
+Future<void> carregarVagas({
+  bool mostrarLoading = true,
+}) async {
+  if (saindo) return;
 
-    try {
-      if (mounted) {
-        setState(() {
-          if (mostrarLoading) {
-            carregando = true;
-          } else {
-            sincronizando = true;
-          }
-        });
-      }
-
-      final dados =
-          await ApiService.buscarVagas(
-        ano: anoAtual,
-        mes: mesAtual,
-      );
-
-      if (!mounted || saindo) return;
-
+  try {
+    if (mounted) {
       setState(() {
-        vagas = dados;
-        carregando = false;
-        sincronizando = false;
+        if (mostrarLoading) {
+          carregando = true;
+        } else {
+          sincronizando = true;
+        }
       });
-    } catch (e) {
-      if (!mounted || saindo) return;
-
-      setState(() {
-        carregando = false;
-        sincronizando = false;
-      });
-
-      debugPrint(
-        'Erro ao atualizar vagas: $e',
-      );
     }
-  }
 
+    final dados = await ApiService.buscarVagas(
+      ano: anoAtual,
+      mes: mesAtual,
+    );
+
+    if (!mounted || saindo) return;
+
+    setState(() {
+      vagas = List<dynamic>.from(dados);
+
+      carregando = false;
+      sincronizando = false;
+    });
+
+  } catch (e) {
+    if (!mounted || saindo) return;
+
+    setState(() {
+      carregando = false;
+      sincronizando = false;
+    });
+
+    debugPrint(
+      'Erro ao atualizar vagas: $e',
+    );
+  }
+}
   // ===================================================
   // SELECIONAR
   // ===================================================

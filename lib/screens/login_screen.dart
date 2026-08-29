@@ -15,10 +15,8 @@ class LoginScreen extends StatefulWidget {
       _LoginScreenState();
 }
 
-class _LoginScreenState
-    extends State<LoginScreen> {
-  final TextEditingController
-      _codigoController =
+class _LoginScreenState extends State<LoginScreen> {
+  final TextEditingController _codigoController =
       TextEditingController();
 
   bool carregando = false;
@@ -45,20 +43,22 @@ class _LoginScreenState
   Future<void> _inicializar() async {
     try {
       // =================================================
-      // CARREGA SESSÃO SALVA
+      // CARREGA SESSÃO LOCAL
       // =================================================
 
       await ApiService.inicializarSessao();
 
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
       // =================================================
-      // NÃO EXISTE SESSÃO LOCAL
+      // NÃO EXISTE SESSÃO
       // =================================================
 
       if (!ApiService.possuiSessao) {
         debugPrint(
-          'Nenhuma sessão salva neste dispositivo.',
+          'Nenhuma sessão salva.',
         );
 
         await _mostrarLogin();
@@ -67,11 +67,11 @@ class _LoginScreenState
       }
 
       // =================================================
-      // EXISTE SESSÃO LOCAL
+      // EXISTE SESSÃO
       // =================================================
 
       debugPrint(
-        'Sessão encontrada no dispositivo.',
+        'Sessão salva encontrada.',
       );
 
       debugPrint(
@@ -83,13 +83,15 @@ class _LoginScreenState
       );
 
       // =================================================
-      // RECUPERA SESSÃO
+      // TENTA RECUPERAR SESSÃO NO SERVIDOR
       // =================================================
 
       final resultado =
           await ApiService.recuperarSessao();
 
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
       // =================================================
       // SESSÃO RECUPERADA
@@ -97,11 +99,10 @@ class _LoginScreenState
 
       if (resultado['success'] == true) {
         debugPrint(
-          'Sessão recuperada com sucesso.',
+          'Sessão recuperada.',
         );
 
-        final agente =
-            resultado['agente'];
+        final agente = resultado['agente'];
 
         if (agente is Map) {
           final agenteMap =
@@ -121,7 +122,21 @@ class _LoginScreenState
           // =============================================
 
           if (tipo == 'ADMIN') {
-            if (!mounted) return;
+            debugPrint(
+              'Sessão ADMIN recuperada.',
+            );
+
+            debugPrint(
+              'Código ADMIN: ${ApiService.codigoSessao}',
+            );
+
+            debugPrint(
+              'Session ID ADMIN: ${ApiService.sessionId}',
+            );
+
+            if (!mounted) {
+              return;
+            }
 
             setState(() {
               recuperandoSessao = false;
@@ -142,7 +157,9 @@ class _LoginScreenState
           // AGENTE
           // =============================================
 
-          if (!mounted) return;
+          if (!mounted) {
+            return;
+          }
 
           setState(() {
             recuperandoSessao = false;
@@ -162,16 +179,18 @@ class _LoginScreenState
         }
 
         // =================================================
-        // SESSÃO EXISTE, MAS AGENTE NÃO VEIO
+        // SESSÃO EXISTE MAS NÃO RETORNOU AGENTE
         // =================================================
 
         debugPrint(
-          'Sessão encontrada, mas agente não foi retornado.',
+          'Sessão encontrada, mas agente não retornado.',
         );
 
         await ApiService.limparSessao();
 
-        if (!mounted) return;
+        if (!mounted) {
+          return;
+        }
 
         await _mostrarLogin();
 
@@ -179,19 +198,19 @@ class _LoginScreenState
       }
 
       // =================================================
-      // SERVIDOR DISSE EXPLICITAMENTE QUE EXPIROU
+      // SESSÃO EXPIRADA
       // =================================================
 
       if (resultado['sessaoExpirada'] == true) {
         debugPrint(
-          'Sessão anterior não é mais válida.',
+          'Sessão expirada.',
         );
 
-        // Normalmente o próprio ApiService
-        // já apagou a sessão.
         await ApiService.limparSessao();
 
-        if (!mounted) return;
+        if (!mounted) {
+          return;
+        }
 
         await _mostrarLogin();
 
@@ -202,17 +221,16 @@ class _LoginScreenState
       // ERRO DE CONEXÃO
       //
       // NÃO APAGA A SESSÃO.
-      //
-      // Mostra o login, mas a sessão antiga continua
-      // salva. O botão poderá tentar recuperar novamente.
       // =================================================
 
       if (resultado['erroConexao'] == true) {
         debugPrint(
-          'Não foi possível verificar a sessão agora.',
+          'Erro de conexão ao recuperar sessão.',
         );
 
-        if (!mounted) return;
+        if (!mounted) {
+          return;
+        }
 
         await _mostrarLogin();
 
@@ -220,28 +238,30 @@ class _LoginScreenState
       }
 
       // =================================================
-      // OUTRO ERRO
+      // OUTRO RESULTADO
       // =================================================
 
       debugPrint(
-        'Resposta inesperada na recuperação: $resultado',
+        'Resposta inesperada: $resultado',
       );
 
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
       await _mostrarLogin();
     } catch (e) {
       debugPrint(
-        'Erro durante recuperação da sessão: $e',
+        'Erro ao inicializar: $e',
       );
 
       // =================================================
-      // IMPORTANTE
-      //
-      // NÃO apagamos a sessão local por erro de conexão.
+      // NÃO APAGA SESSÃO EM CASO DE ERRO
       // =================================================
 
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
       await _mostrarLogin();
     }
@@ -252,20 +272,23 @@ class _LoginScreenState
   // ===================================================
 
   Future<void> _mostrarLogin() async {
-    if (!mounted) return;
+    if (!mounted) {
+      return;
+    }
 
     setState(() {
       recuperandoSessao = false;
     });
 
-    // Mantém os 5 segundos da tela original.
     await Future.delayed(
       const Duration(
         seconds: 5,
       ),
     );
 
-    if (!mounted) return;
+    if (!mounted) {
+      return;
+    }
 
     setState(() {
       mostrarLogin = true;
@@ -284,195 +307,12 @@ class _LoginScreenState
   }
 
   // ===================================================
-  // LOGIN / TENTATIVA DE RECUPERAÇÃO
+  // LOGIN
   // ===================================================
 
   Future<void> fazerLogin() async {
     if (carregando) {
       return;
-    }
-
-    // =================================================
-    // AINDA RECUPERANDO
-    // =================================================
-
-    if (recuperandoSessao) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          backgroundColor:
-              Colors.orange,
-          content: Text(
-            'Aguarde a verificação da sessão.',
-            style: TextStyle(
-              color: Colors.white,
-            ),
-          ),
-        ),
-      );
-
-      return;
-    }
-
-    // =================================================
-    // EXISTE SESSÃO SALVA
-    //
-    // PRIMEIRO TENTA RECUPERAR.
-    //
-    // NÃO cria outra sessão enquanto a anterior
-    // ainda existir.
-    // =================================================
-
-    if (ApiService.possuiSessao) {
-      debugPrint(
-        'Existe sessão salva. Tentando recuperar...',
-      );
-
-      setState(() {
-        carregando = true;
-        recuperandoSessao = true;
-      });
-
-      try {
-        final resultado =
-            await ApiService.recuperarSessao();
-
-        if (!mounted) return;
-
-        setState(() {
-          carregando = false;
-          recuperandoSessao = false;
-        });
-
-        // =============================================
-        // RECUPEROU
-        // =============================================
-
-        if (resultado['success'] == true) {
-          final agente =
-              resultado['agente'];
-
-          if (agente is Map) {
-            final agenteMap =
-                Map<String, dynamic>.from(
-              agente,
-            );
-
-            final tipo =
-                agenteMap['tipo']
-                        ?.toString()
-                        .trim()
-                        .toUpperCase() ??
-                    'AGENTE';
-
-            // ===========================================
-            // ADMIN
-            // ===========================================
-
-            if (tipo == 'ADMIN') {
-              Navigator.pushReplacement(
-                context,
-                MaterialPageRoute(
-                  builder: (_) =>
-                      const AdminHome(),
-                ),
-              );
-
-              return;
-            }
-
-            // ===========================================
-            // AGENTE
-            // ===========================================
-
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(
-                builder: (_) =>
-                    AvisoScreen(
-                  agente: agenteMap,
-                ),
-              ),
-            );
-
-            return;
-          }
-        }
-
-        // =============================================
-        // SESSÃO EXPIROU
-        // =============================================
-
-        if (resultado['sessaoExpirada'] == true) {
-          await ApiService.limparSessao();
-
-          if (!mounted) return;
-
-          setState(() {
-            mostrarLogin = true;
-          });
-
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              backgroundColor:
-                  Colors.orange,
-              content: Text(
-                'A sessão anterior foi encerrada. '
-                'Faça login novamente.',
-                style: TextStyle(
-                  color: Colors.white,
-                ),
-              ),
-            ),
-          );
-
-          return;
-        }
-
-        // =============================================
-        // ERRO DE CONEXÃO
-        //
-        // Mantém sessão salva.
-        // =============================================
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            backgroundColor:
-                Colors.orange,
-            content: Text(
-              'Não foi possível verificar a sessão. '
-              'Tente novamente.',
-              style: TextStyle(
-                color: Colors.white,
-              ),
-            ),
-          ),
-        );
-
-        return;
-      } catch (e) {
-        if (!mounted) return;
-
-        setState(() {
-          carregando = false;
-          recuperandoSessao = false;
-        });
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            backgroundColor:
-                Colors.orange,
-            content: Text(
-              'Não foi possível recuperar a sessão. '
-              'Tente novamente.',
-              style: const TextStyle(
-                color: Colors.white,
-              ),
-            ),
-          ),
-        );
-
-        return;
-      }
     }
 
     // =================================================
@@ -482,15 +322,10 @@ class _LoginScreenState
     final codigo =
         _codigoController.text.trim();
 
-    // =================================================
-    // CÓDIGO VAZIO
-    // =================================================
-
     if (codigo.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          backgroundColor:
-              Colors.red,
+          backgroundColor: Colors.red,
           content: Text(
             'Informe o código.',
             style: TextStyle(
@@ -504,20 +339,42 @@ class _LoginScreenState
     }
 
     // =================================================
-    // LOGIN NORMAL
+    // INICIA LOGIN
     // =================================================
 
-    try {
-      setState(() {
-        carregando = true;
-      });
+    setState(() {
+      carregando = true;
+    });
 
-      final agente =
+    try {
+      debugPrint(
+        '========================================',
+      );
+
+      debugPrint(
+        'Tentando login com código: $codigo',
+      );
+
+      debugPrint(
+        '========================================',
+      );
+
+      // =================================================
+      // CONSULTA SERVIDOR
+      //
+      // É AQUI QUE DESCOBRIMOS SE É ADMIN OU AGENTE.
+      //
+      // O SERVIDOR TAMBÉM CRIA O SESSION ID.
+      // =================================================
+
+      final resultado =
           await ApiService.buscarAgente(
         codigo,
       );
 
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
       setState(() {
         carregando = false;
@@ -527,23 +384,19 @@ class _LoginScreenState
       // LOGIN RECUSADO
       // =================================================
 
-      if (agente['success'] != true) {
+      if (resultado['success'] != true) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            backgroundColor:
-                Colors.red,
-            duration:
-                const Duration(
+            backgroundColor: Colors.red,
+            duration: const Duration(
               seconds: 5,
             ),
             content: Text(
-              agente['mensagem']
+              resultado['mensagem']
                       ?.toString() ??
-                  'Agente não encontrado.',
-              style:
-                  const TextStyle(
-                color:
-                    Colors.white,
+                  'Código não autorizado.',
+              style: const TextStyle(
+                color: Colors.white,
               ),
             ),
           ),
@@ -553,21 +406,90 @@ class _LoginScreenState
       }
 
       // =================================================
-      // TIPO
+      // IDENTIFICA TIPO
       // =================================================
 
       final tipo =
-          agente['tipo']
+          resultado['tipo']
                   ?.toString()
                   .trim()
                   .toUpperCase() ??
               'AGENTE';
 
+      debugPrint(
+        'Tipo retornado pelo servidor: $tipo',
+      );
+
+      // =================================================
+      // SESSION ID RETORNADO PELO SERVIDOR
+      // =================================================
+
+      final sessionId =
+          resultado['sessionId'];
+
+      debugPrint(
+        'Session ID retornado pelo servidor: $sessionId',
+      );
+
       // =================================================
       // ADMIN
+      //
+      // IMPORTANTE:
+      //
+      // O ADMIN TAMBÉM POSSUI SESSION ID.
+      //
+      // NÃO PODEMOS MAIS EXECUTAR:
+      //
+      // await ApiService.limparSessao();
+      //
+      // pois isso apagaria a sessão antes do acesso
+      // ao relatório administrativo.
       // =================================================
 
       if (tipo == 'ADMIN') {
+        debugPrint(
+          '========================================',
+        );
+
+        debugPrint(
+          'LOGIN ADMIN AUTORIZADO.',
+        );
+
+        debugPrint(
+          'Código ADMIN: ${ApiService.codigoSessao}',
+        );
+
+        debugPrint(
+          'Session ID ADMIN: ${ApiService.sessionId}',
+        );
+
+        debugPrint(
+          'Sessão ADMIN será mantida.',
+        );
+
+        debugPrint(
+          '========================================',
+        );
+
+        // =================================================
+        // NÃO LIMPAR A SESSÃO AQUI!
+        //
+        // A sessão será usada pelo:
+        //
+        // buscarInscricoesPDF()
+        //
+        // para enviar:
+        //
+        // codigo
+        // sessionId
+        //
+        // ao Apps Script.
+        // =================================================
+
+        if (!mounted) {
+          return;
+        }
+
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(
@@ -583,24 +505,31 @@ class _LoginScreenState
       // AGENTE NORMAL
       // =================================================
 
-      final sessionId =
-          agente['sessionId'];
+      // =================================================
+      // AGENTE PRECISA DE SESSION ID
+      // =================================================
 
       if (sessionId == null ||
           sessionId
               .toString()
               .trim()
               .isEmpty) {
+        debugPrint(
+          'Servidor não forneceu sessionId para agente.',
+        );
+
         await ApiService.limparSessao();
 
-        if (!mounted) return;
+        if (!mounted) {
+          return;
+        }
 
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            backgroundColor:
-                Colors.red,
-            duration:
-                Duration(seconds: 5),
+            backgroundColor: Colors.red,
+            duration: Duration(
+              seconds: 5,
+            ),
             content: Text(
               'Não foi possível iniciar uma sessão segura. '
               'Tente novamente.',
@@ -615,6 +544,30 @@ class _LoginScreenState
       }
 
       // =================================================
+      // LOGIN DO AGENTE OK
+      // =================================================
+
+      debugPrint(
+        '========================================',
+      );
+
+      debugPrint(
+        'LOGIN DE AGENTE AUTORIZADO.',
+      );
+
+      debugPrint(
+        'Código: ${ApiService.codigoSessao}',
+      );
+
+      debugPrint(
+        'Session ID: ${ApiService.sessionId}',
+      );
+
+      debugPrint(
+        '========================================',
+      );
+
+      // =================================================
       // ENTRA NO AVISO
       // =================================================
 
@@ -623,31 +576,33 @@ class _LoginScreenState
         MaterialPageRoute(
           builder: (_) =>
               AvisoScreen(
-            agente: agente,
+            agente: resultado,
           ),
         ),
       );
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
       setState(() {
         carregando = false;
       });
 
+      debugPrint(
+        'Erro no login: $e',
+      );
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          backgroundColor:
-              Colors.red,
-          duration:
-              const Duration(
+          backgroundColor: Colors.red,
+          duration: const Duration(
             seconds: 5,
           ),
           content: Text(
             e.toString(),
-            style:
-                const TextStyle(
-              color:
-                  Colors.white,
+            style: const TextStyle(
+              color: Colors.white,
             ),
           ),
         ),
@@ -664,7 +619,7 @@ class _LoginScreenState
     BuildContext context,
   ) {
     // =================================================
-    // RECUPERANDO
+    // RECUPERANDO SESSÃO
     // =================================================
 
     if (recuperandoSessao) {
@@ -677,8 +632,7 @@ class _LoginScreenState
                 MainAxisSize.min,
             children: [
               CircularProgressIndicator(
-                color:
-                    Colors.white,
+                color: Colors.white,
               ),
 
               SizedBox(
@@ -688,10 +642,8 @@ class _LoginScreenState
               Text(
                 'Verificando sessão...',
                 style: TextStyle(
-                  color:
-                      Colors.white70,
-                  fontSize:
-                      16,
+                  color: Colors.white70,
+                  fontSize: 16,
                 ),
               ),
             ],
@@ -705,34 +657,26 @@ class _LoginScreenState
     // =================================================
 
     return AnimatedOpacity(
-      duration:
-          const Duration(
+      duration: const Duration(
         milliseconds: 2200,
       ),
-      curve:
-          Curves.easeInOut,
+      curve: Curves.easeInOut,
       opacity:
           mostrarLogin
               ? 1
               : 0,
-      child:
-          AnimatedScale(
-        duration:
-            const Duration(
+      child: AnimatedScale(
+        duration: const Duration(
           milliseconds: 2200,
         ),
-        curve:
-            Curves.easeOutBack,
+        curve: Curves.easeOutBack,
         scale:
             mostrarLogin
                 ? 1
                 : 0.85,
-        child:
-            IgnorePointer(
-          ignoring:
-              !mostrarLogin,
-          child:
-              LoginCard(
+        child: IgnorePointer(
+          ignoring: !mostrarLogin,
+          child: LoginCard(
             controller:
                 _codigoController,
             carregando:

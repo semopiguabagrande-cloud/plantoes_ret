@@ -10,21 +10,18 @@ class ApiService {
   // GOOGLE APPS SCRIPT
   // ===================================================
 
- static const String baseUrl =
-    'https://script.google.com/macros/s/AKfycbw77y97FCRMsV9a9p6P2ApOODLAnjn7rNBXmNG7jck38gKLuCD7orTpp71b_fIzm35tlg/exec';
+static const String baseUrl =
+    'https://script.google.com/macros/s/AKfycbwtvlBfdqbpDZKwS5PQOAdBJWC7GVNjkKhoFylG8PPE-p2ZKt0gJhjdiDL3-PF2lJrhsQ/exec';
 
-  static const Duration timeout =
-      Duration(seconds: 30);
+  static const Duration timeout = Duration(seconds: 30);
 
   // ===================================================
   // CHAVES DA SESSÃO SALVA
   // ===================================================
 
-  static const String _chaveCodigo =
-      'sessao_codigo';
+  static const String _chaveCodigo = 'sessao_codigo';
 
-  static const String _chaveSessionId =
-      'sessao_session_id';
+  static const String _chaveSessionId = 'sessao_session_id';
 
   // ===================================================
   // CONTROLE DA SESSÃO EM MEMÓRIA
@@ -33,11 +30,9 @@ class ApiService {
   static String? _codigoSessao;
   static String? _sessionId;
 
-  static String? get codigoSessao =>
-      _codigoSessao;
+  static String? get codigoSessao => _codigoSessao;
 
-  static String? get sessionId =>
-      _sessionId;
+  static String? get sessionId => _sessionId;
 
   static bool get possuiSessao =>
       _codigoSessao != null &&
@@ -51,18 +46,11 @@ class ApiService {
 
   static Future<void> inicializarSessao() async {
     try {
-      final prefs =
-          await SharedPreferences.getInstance();
+      final prefs = await SharedPreferences.getInstance();
 
-      final codigo =
-          prefs.getString(
-        _chaveCodigo,
-      );
+      final codigo = prefs.getString(_chaveCodigo);
 
-      final sessao =
-          prefs.getString(
-        _chaveSessionId,
-      );
+      final sessao = prefs.getString(_chaveSessionId);
 
       if (codigo != null &&
           codigo.isNotEmpty &&
@@ -72,6 +60,8 @@ class ApiService {
         _sessionId = sessao;
       }
     } catch (e) {
+      debugPrint('Inicializar sessão: erro: $e');
+
       _codigoSessao = null;
       _sessionId = null;
     }
@@ -87,20 +77,14 @@ class ApiService {
     }
 
     try {
-      final prefs =
-          await SharedPreferences.getInstance();
+      final prefs = await SharedPreferences.getInstance();
 
-      await prefs.setString(
-        _chaveCodigo,
-        _codigoSessao!,
-      );
+      await prefs.setString(_chaveCodigo, _codigoSessao!);
 
-      await prefs.setString(
-        _chaveSessionId,
-        _sessionId!,
-      );
+      await prefs.setString(_chaveSessionId, _sessionId!);
     } catch (e) {
       // A sessão continua funcionando em memória.
+      debugPrint('Salvar sessão local: erro: $e');
     }
   }
 
@@ -113,18 +97,13 @@ class ApiService {
     _sessionId = null;
 
     try {
-      final prefs =
-          await SharedPreferences.getInstance();
+      final prefs = await SharedPreferences.getInstance();
 
-      await prefs.remove(
-        _chaveCodigo,
-      );
+      await prefs.remove(_chaveCodigo);
 
-      await prefs.remove(
-        _chaveSessionId,
-      );
+      await prefs.remove(_chaveSessionId);
     } catch (e) {
-      // ignora
+      debugPrint('Limpar sessão: erro: $e');
     }
   }
 
@@ -132,19 +111,12 @@ class ApiService {
   // LOGIN
   // ===================================================
 
-  static Future<Map<String, dynamic>> buscarAgente(
-    String codigo,
-  ) async {
+  static Future<Map<String, dynamic>> buscarAgente(String codigo) async {
     try {
-      final codigoNormalizado =
-          codigo.trim();
+      final codigoNormalizado = codigo.trim();
 
       if (codigoNormalizado.isEmpty) {
-        return {
-          'success': false,
-          'mensagem':
-              'Código não informado.',
-        };
+        return {'success': false, 'mensagem': 'Código não informado.'};
       }
 
       final url = Uri.parse(
@@ -154,315 +126,208 @@ class ApiService {
         '&t=${DateTime.now().millisecondsSinceEpoch}',
       );
 
-      final response =
-          await http
-              .get(url)
-              .timeout(timeout);
+      final response = await http.get(url).timeout(timeout);
 
       if (response.statusCode != 200) {
-        throw Exception(
-          'Erro de conexão.',
-        );
+        throw Exception('Erro de conexão.');
       }
 
-      final body =
-          jsonDecode(response.body);
+      final body = jsonDecode(response.body);
 
-      final resultado =
-          Map<String, dynamic>.from(
-        body,
-      );
+      if (body is! Map) {
+        throw Exception('Resposta inválida do servidor.');
+      }
+
+      final resultado = Map<String, dynamic>.from(body);
 
       // =================================================
       // LOGIN AUTORIZADO
       // =================================================
 
       if (resultado['success'] == true) {
-        final novaSessao =
-            resultado['sessionId'];
+        final novaSessao = resultado['sessionId'];
 
         // =================================================
-        // AGENTE NORMAL
+        // SALVA SESSÃO DO AGENTE
         // =================================================
 
-        if (novaSessao != null &&
-            novaSessao
-                .toString()
-                .isNotEmpty) {
-          _codigoSessao =
-              codigoNormalizado;
+        if (novaSessao != null && novaSessao.toString().trim().isNotEmpty) {
+          _codigoSessao = codigoNormalizado;
 
-          _sessionId =
-              novaSessao.toString();
+          _sessionId = novaSessao.toString();
 
-          // Salva para sobreviver ao fechamento
-          // da aba/navegador.
           await _salvarSessaoLocal();
         }
 
         // =================================================
-        // SEGURANÇA
+        // TODO USUÁRIO PRECISA DE SESSION ID
+        // INCLUSIVE ADMIN
         // =================================================
 
-        if (resultado['tipo']
-                    ?.toString()
-                    .toUpperCase() !=
-                'ADMIN' &&
-            (novaSessao == null ||
-                novaSessao
-                    .toString()
-                    .isEmpty)) {
+        final tipo = resultado['tipo']?.toString().trim().toUpperCase() ?? '';
+
+        // =================================================
+        // SESSION ID É OBRIGATÓRIO
+        // TANTO PARA AGENTE QUANTO PARA ADMIN
+        // =================================================
+
+        if (novaSessao == null || novaSessao.toString().trim().isEmpty) {
           return {
             'success': false,
-            'mensagem':
-                'O servidor não forneceu uma sessão válida.',
+            'mensagem': 'O servidor não forneceu uma sessão válida.',
           };
         }
+
+        // =================================================
+        // GARANTE QUE A SESSÃO FICOU SALVA
+        // =================================================
+
+        _codigoSessao = codigoNormalizado;
+
+        _sessionId = novaSessao.toString();
+
+        await _salvarSessaoLocal();
+
+        debugPrint('Login $tipo autorizado.');
+
+        debugPrint('Session ID: $_sessionId');
       }
 
       return resultado;
     } on TimeoutException {
-      throw Exception(
-        'Tempo de conexão esgotado.',
-      );
+      throw Exception('Tempo de conexão esgotado.');
     } catch (e) {
-      throw Exception(
-        'Erro ao buscar agente.\n$e',
-      );
+      throw Exception('Erro ao buscar agente.\n$e');
     }
   }
 
- // ===================================================
-// RECUPERAR SESSÃO
-// ===================================================
+  // ===================================================
+  // RECUPERAR SESSÃO
+  // ===================================================
 
-static Future<Map<String, dynamic>>
-    recuperarSessao() async {
+  static Future<Map<String, dynamic>> recuperarSessao() async {
+    try {
+      // =================================================
+      // CARREGA A SESSÃO SALVA
+      // =================================================
 
-  try {
+      await inicializarSessao();
 
-    // =================================================
-    // CARREGA A SESSÃO SALVA NO DISPOSITIVO
-    // =================================================
+      if (!possuiSessao) {
+        return {
+          'success': false,
+          'sessaoExpirada': true,
+          'mensagem': 'Nenhuma sessão salva neste dispositivo.',
+        };
+      }
 
-    await inicializarSessao();
+      // =================================================
+      // GUARDA OS DADOS DA SESSÃO
+      // =================================================
 
+      final codigo = _codigoSessao!;
 
-    // =================================================
-    // NÃO EXISTE SESSÃO SALVA
-    // =================================================
+      final sessao = _sessionId!;
 
-    if (!possuiSessao) {
+      // =================================================
+      // VERIFICA DIRETAMENTE NO SERVIDOR
+      //
+      // NÃO usa heartbeat aqui.
+      // =================================================
 
-      return {
-        'success': false,
-        'sessaoExpirada': true,
-        'mensagem':
-            'Nenhuma sessão salva neste dispositivo.',
-      };
+      final url = Uri.parse(
+        '$baseUrl'
+        '?tipo=recuperarSessao'
+        '&codigo=${Uri.encodeComponent(codigo)}'
+        '&sessionId=${Uri.encodeComponent(sessao)}'
+        '&t=${DateTime.now().millisecondsSinceEpoch}',
+      );
 
-    }
+      final response = await http.get(url).timeout(timeout);
 
+      // =================================================
+      // ERRO HTTP
+      //
+      // NÃO APAGA A SESSÃO.
+      // =================================================
 
-    // =================================================
-    // GUARDA OS DADOS DA SESSÃO
-    // =================================================
+      if (response.statusCode != 200) {
+        return {
+          'success': false,
+          'erroConexao': true,
+          'mensagem': 'Não foi possível verificar a sessão.',
+        };
+      }
 
-    final codigo =
-        _codigoSessao!;
+      final body = jsonDecode(response.body);
 
-    final sessao =
-        _sessionId!;
+      if (body is! Map) {
+        return {
+          'success': false,
+          'erroConexao': true,
+          'mensagem': 'Resposta inválida do servidor.',
+        };
+      }
 
+      final resultado = Map<String, dynamic>.from(body);
 
-    // =================================================
-    // VERIFICA A SESSÃO DIRETAMENTE NO SERVIDOR
-    //
-    // IMPORTANTE:
-    //
-    // NÃO usamos heartbeat aqui.
-    //
-    // Se a internet estiver indisponível,
-    // a sessão local NÃO será apagada.
-    // =================================================
+      // =================================================
+      // SESSÃO VÁLIDA
+      // =================================================
 
-    final url = Uri.parse(
-      '$baseUrl'
-      '?tipo=recuperarSessao'
-      '&codigo=${Uri.encodeComponent(codigo)}'
-      '&sessionId=${Uri.encodeComponent(sessao)}'
-      '&t=${DateTime.now().millisecondsSinceEpoch}',
-    );
+      if (resultado['success'] == true &&
+          resultado['sessaoRecuperada'] == true) {
+        _codigoSessao = codigo;
 
+        _sessionId = sessao;
 
-    final response =
-        await http
-            .get(url)
-            .timeout(timeout);
+        await _salvarSessaoLocal();
 
+        resultado['sessionId'] = sessao;
 
-    // =================================================
-    // ERRO HTTP
-    //
-    // PRESERVA A SESSÃO LOCAL.
-    // =================================================
+        resultado['sessaoRecuperada'] = true;
 
-    if (response.statusCode != 200) {
+        return resultado;
+      }
 
+      // =================================================
+      // SERVIDOR CONFIRMOU EXPLICITAMENTE
+      // QUE A SESSÃO NÃO EXISTE
+      // =================================================
+
+      if (resultado['sessaoExpirada'] == true) {
+        await limparSessao();
+
+        return resultado;
+      }
+
+      // =================================================
+      // RESPOSTA INESPERADA
+      //
+      // NÃO APAGA A SESSÃO.
+      // =================================================
+
+      return {...resultado, 'success': false, 'erroConexao': false};
+    } on TimeoutException {
       return {
         'success': false,
         'erroConexao': true,
         'mensagem':
-            'Não foi possível verificar a sessão.',
+            'Tempo de conexão esgotado. '
+            'A sessão local foi preservada.',
       };
+    } catch (e) {
+      debugPrint('Recuperar sessão: erro: $e');
 
+      return {
+        'success': false,
+        'erroConexao': true,
+        'mensagem': 'Não foi possível verificar a sessão.',
+      };
     }
-
-
-    // =================================================
-    // DECODIFICA RESPOSTA
-    // =================================================
-
-    final body =
-        jsonDecode(response.body);
-
-
-    final resultado =
-        Map<String, dynamic>.from(
-      body,
-    );
-
-
-    // =================================================
-    // SESSÃO VÁLIDA
-    // =================================================
-
-    if (
-      resultado['success'] == true &&
-      resultado['sessaoRecuperada'] == true
-    ) {
-
-      // =================================================
-      // MANTÉM O MESMO SESSION_ID
-      // =================================================
-
-      _codigoSessao =
-          codigo;
-
-      _sessionId =
-          sessao;
-
-
-      // =================================================
-      // GARANTE QUE A SESSÃO CONTINUE SALVA
-      // =================================================
-
-      await _salvarSessaoLocal();
-
-
-      // =================================================
-      // DEVOLVE O SESSION_ID
-      // =================================================
-
-      resultado['sessionId'] =
-          sessao;
-
-
-      resultado['sessaoRecuperada'] =
-          true;
-
-
-      return resultado;
-
-    }
-
-
-    // =================================================
-    // SERVIDOR CONFIRMOU QUE A SESSÃO FOI ENCERRADA
-    //
-    // SOMENTE NESTE CASO APAGAMOS A SESSÃO LOCAL.
-    // =================================================
-
-    if (
-      resultado['sessaoExpirada'] == true
-    ) {
-
-      await limparSessao();
-
-
-      return resultado;
-
-    }
-
-
-    // =================================================
-    // RESPOSTA INESPERADA DO SERVIDOR
-    //
-    // NÃO APAGA A SESSÃO LOCAL.
-    // =================================================
-
-    return {
-
-      ...resultado,
-
-      'success': false,
-
-      'erroConexao': false,
-
-    };
-
   }
 
-
-  // ===================================================
-  // TIMEOUT
-  //
-  // NÃO APAGA A SESSÃO.
-  // ===================================================
-
-  on TimeoutException {
-
-    return {
-
-      'success': false,
-
-      'erroConexao': true,
-
-      'mensagem':
-          'Tempo de conexão esgotado. '
-          'A sessão local foi preservada.',
-
-    };
-
-  }
-
-
-  // ===================================================
-  // ERRO DE CONEXÃO
-  //
-  // NÃO APAGA A SESSÃO.
-  // ===================================================
-
-  catch (e) {
-
-    return {
-
-      'success': false,
-
-      'erroConexao': true,
-
-      'mensagem':
-          'Não foi possível verificar a sessão.',
-
-    };
-
-  }
-
-}
-
-      
-
-  // ===================================================
+    // ===================================================
   // BUSCAR VAGAS
   // ===================================================
 
@@ -471,18 +336,77 @@ static Future<Map<String, dynamic>>
     required String mes,
   }) async {
     try {
-      final url = Uri.parse(
+      // =================================================
+      // VERIFICA SE EXISTE SESSÃO
+      // =================================================
+
+      if (!possuiSessao) {
+        throw Exception(
+          'Sessão não encontrada. Faça login novamente.',
+        );
+      }
+
+      // =================================================
+      // MONTA URL
+      // =================================================
+
+      final parametros = StringBuffer(
         '$baseUrl'
         '?tipo=vagas'
         '&ano=${Uri.encodeComponent(ano)}'
         '&mes=${Uri.encodeComponent(mes)}'
+        '&codigo=${Uri.encodeComponent(_codigoSessao!)}'
+        '&sessionId=${Uri.encodeComponent(_sessionId!)}',
+      );
+
+      parametros.write(
         '&t=${DateTime.now().millisecondsSinceEpoch}',
       );
+
+      final url = Uri.parse(
+        parametros.toString(),
+      );
+
+      // =================================================
+      // DEBUG
+      // =================================================
+
+      debugPrint(
+        '========================================',
+      );
+
+      debugPrint(
+        'BUSCANDO VAGAS',
+      );
+
+      debugPrint(
+        'Código: $_codigoSessao',
+      );
+
+      debugPrint(
+        'Session ID: $_sessionId',
+      );
+
+      // =================================================
+      // CONSULTA SERVIDOR
+      // =================================================
 
       final response =
           await http
               .get(url)
               .timeout(timeout);
+
+      debugPrint(
+        'Vagas HTTP: ${response.statusCode}',
+      );
+
+      debugPrint(
+        'Vagas resposta: ${response.body}',
+      );
+
+      // =================================================
+      // ERRO HTTP
+      // =================================================
 
       if (response.statusCode != 200) {
         throw Exception(
@@ -490,17 +414,88 @@ static Future<Map<String, dynamic>>
         );
       }
 
+      // =================================================
+      // DECODIFICA
+      // =================================================
+
       final body =
           jsonDecode(response.body);
 
-      return List<dynamic>.from(
-        body,
+      // =================================================
+      // RESPOSTA NORMAL
+      // =================================================
+
+      if (body is List) {
+        return List<dynamic>.from(
+          body,
+        );
+      }
+
+      // =================================================
+      // RESPOSTA DO SERVIDOR EM MAP
+      // =================================================
+
+      if (body is Map) {
+        final resultado =
+            Map<String, dynamic>.from(
+          body,
+        );
+
+        // ===============================================
+        // SOMENTE AQUI CONSIDERAMOS
+        // QUE O SERVIDOR CONFIRMOU EXPIRAÇÃO
+        // ===============================================
+
+        if (
+          resultado['sessaoExpirada'] ==
+          true
+        ) {
+          await limparSessao();
+
+          throw Exception(
+            resultado['mensagem']
+                    ?.toString() ??
+                'Sessão inválida ou encerrada.',
+          );
+        }
+
+        // ===============================================
+        // OUTRO ERRO DO SERVIDOR
+        //
+        // NÃO APAGA A SESSÃO
+        // ===============================================
+
+        throw Exception(
+          resultado['mensagem']
+                  ?.toString() ??
+              'Erro ao buscar vagas.',
+        );
+      }
+
+      // =================================================
+      // RESPOSTA INVÁLIDA
+      // =================================================
+
+      throw Exception(
+        'Resposta inválida ao buscar vagas.',
       );
+
     } on TimeoutException {
+      // =================================================
+      // TIMEOUT
+      //
+      // NÃO APAGA SESSÃO
+      // =================================================
+
       throw Exception(
         'Tempo de conexão esgotado.',
       );
+
     } catch (e) {
+      debugPrint(
+        'Buscar vagas: erro: $e',
+      );
+
       throw Exception(
         'Erro ao buscar vagas.\n$e',
       );
@@ -511,31 +506,26 @@ static Future<Map<String, dynamic>>
   // SALVAR INSCRIÇÃO
   // ===================================================
 
-  static Future<Map<String, dynamic>>
-      salvarInscricao({
+  static Future<Map<String, dynamic>> salvarInscricao({
     required String ano,
     required String mes,
     required String codigo,
     required String matricula,
     required String nome,
-    required List<Map<String, dynamic>>
-        datas,
+    required List<Map<String, dynamic>> datas,
   }) async {
     try {
       if (!possuiSessao) {
         return {
           'success': false,
           'sessaoExpirada': true,
-          'mensagem':
-              'Sessão não encontrada. Faça login novamente.',
+          'mensagem': 'Sessão não encontrada. Faça login novamente.',
         };
       }
 
-      final jsonDatas =
-          jsonEncode(datas);
+      final jsonDatas = jsonEncode(datas);
 
-      final parametros =
-          StringBuffer(
+      final parametros = StringBuffer(
         '$baseUrl'
         '?tipo=salvarInscricao'
         '&ano=${Uri.encodeComponent(ano)}'
@@ -547,32 +537,27 @@ static Future<Map<String, dynamic>>
         '&sessionId=${Uri.encodeComponent(_sessionId!)}',
       );
 
-      parametros.write(
-        '&t=${DateTime.now().millisecondsSinceEpoch}',
-      );
+      parametros.write('&t=${DateTime.now().millisecondsSinceEpoch}');
 
-      final response =
-          await http
-              .get(
-                Uri.parse(
-                  parametros.toString(),
-                ),
-              )
-              .timeout(timeout);
+      final response = await http
+          .get(Uri.parse(parametros.toString()))
+          .timeout(timeout);
 
       if (response.statusCode != 200) {
-        throw Exception(
-          'Erro ao salvar inscrição.',
-        );
+        throw Exception('Erro ao salvar inscrição.');
       }
 
-      final body =
-          jsonDecode(response.body);
+      final body = jsonDecode(response.body);
 
-      final resultado =
-          Map<String, dynamic>.from(
-        body,
-      );
+      if (body is! Map) {
+        throw Exception('Resposta inválida ao salvar inscrição.');
+      }
+
+      final resultado = Map<String, dynamic>.from(body);
+
+      // =================================================
+      // SOMENTE APAGA SE SERVIDOR CONFIRMAR EXPIRAÇÃO
+      // =================================================
 
       if (resultado['sessaoExpirada'] == true) {
         await limparSessao();
@@ -580,13 +565,9 @@ static Future<Map<String, dynamic>>
 
       return resultado;
     } on TimeoutException {
-      throw Exception(
-        'Tempo de conexão esgotado.',
-      );
+      throw Exception('Tempo de conexão esgotado.');
     } catch (e) {
-      throw Exception(
-        'Erro ao salvar inscrição.\n$e',
-      );
+      throw Exception('Erro ao salvar inscrição.\n$e');
     }
   }
 
@@ -594,27 +575,22 @@ static Future<Map<String, dynamic>>
   // CANCELAR INSCRIÇÃO
   // ===================================================
 
-  static Future<Map<String, dynamic>>
-      cancelarInscricao({
+  static Future<Map<String, dynamic>> cancelarInscricao({
     required String codigo,
-    required List<Map<String, dynamic>>
-        datas,
+    required List<Map<String, dynamic>> datas,
   }) async {
     try {
       if (!possuiSessao) {
         return {
           'success': false,
           'sessaoExpirada': true,
-          'mensagem':
-              'Sessão não encontrada. Faça login novamente.',
+          'mensagem': 'Sessão não encontrada. Faça login novamente.',
         };
       }
 
-      final jsonDatas =
-          jsonEncode(datas);
+      final jsonDatas = jsonEncode(datas);
 
-      final parametros =
-          StringBuffer(
+      final parametros = StringBuffer(
         '$baseUrl'
         '?tipo=cancelarInscricao'
         '&codigo=${Uri.encodeComponent(codigo)}'
@@ -622,32 +598,27 @@ static Future<Map<String, dynamic>>
         '&sessionId=${Uri.encodeComponent(_sessionId!)}',
       );
 
-      parametros.write(
-        '&t=${DateTime.now().millisecondsSinceEpoch}',
-      );
+      parametros.write('&t=${DateTime.now().millisecondsSinceEpoch}');
 
-      final response =
-          await http
-              .get(
-                Uri.parse(
-                  parametros.toString(),
-                ),
-              )
-              .timeout(timeout);
+      final response = await http
+          .get(Uri.parse(parametros.toString()))
+          .timeout(timeout);
 
       if (response.statusCode != 200) {
-        throw Exception(
-          'Erro ao cancelar inscrição.',
-        );
+        throw Exception('Erro ao cancelar inscrição.');
       }
 
-      final body =
-          jsonDecode(response.body);
+      final body = jsonDecode(response.body);
 
-      final resultado =
-          Map<String, dynamic>.from(
-        body,
-      );
+      if (body is! Map) {
+        throw Exception('Resposta inválida ao cancelar inscrição.');
+      }
+
+      final resultado = Map<String, dynamic>.from(body);
+
+      // =================================================
+      // SOMENTE APAGA SE SERVIDOR CONFIRMAR EXPIRAÇÃO
+      // =================================================
 
       if (resultado['sessaoExpirada'] == true) {
         await limparSessao();
@@ -655,13 +626,9 @@ static Future<Map<String, dynamic>>
 
       return resultado;
     } on TimeoutException {
-      throw Exception(
-        'Tempo de conexão esgotado.',
-      );
+      throw Exception('Tempo de conexão esgotado.');
     } catch (e) {
-      throw Exception(
-        'Erro ao cancelar inscrição.\n$e',
-      );
+      throw Exception('Erro ao cancelar inscrição.\n$e');
     }
   }
 
@@ -669,8 +636,7 @@ static Future<Map<String, dynamic>>
   // MINHAS INSCRIÇÕES
   // ===================================================
 
-  static Future<List<Map<String, dynamic>>>
-      buscarMinhasInscricoes(
+  static Future<List<Map<String, dynamic>>> buscarMinhasInscricoes(
     String codigo,
   ) async {
     try {
@@ -678,73 +644,50 @@ static Future<Map<String, dynamic>>
         return [];
       }
 
-      final parametros =
-          StringBuffer(
+      final parametros = StringBuffer(
         '$baseUrl'
         '?tipo=minhas'
         '&codigo=${Uri.encodeComponent(codigo)}'
         '&sessionId=${Uri.encodeComponent(_sessionId!)}',
       );
 
-      parametros.write(
-        '&t=${DateTime.now().millisecondsSinceEpoch}',
-      );
+      parametros.write('&t=${DateTime.now().millisecondsSinceEpoch}');
 
-      final response =
-          await http
-              .get(
-                Uri.parse(
-                  parametros.toString(),
-                ),
-              )
-              .timeout(timeout);
+      final response = await http
+          .get(Uri.parse(parametros.toString()))
+          .timeout(timeout);
 
       if (response.statusCode != 200) {
-        throw Exception(
-          'Erro ao buscar inscrições.',
-        );
+        throw Exception('Erro ao buscar inscrições.');
       }
 
-      final body =
-          jsonDecode(response.body);
+      final body = jsonDecode(response.body);
+
+      // =================================================
+      // RESPOSTA EM MAP = POSSÍVEL ERRO DO SERVIDOR
+      // =================================================
 
       if (body is Map) {
-        final resultado =
-            Map<String, dynamic>.from(
-          body,
-        );
+        final resultado = Map<String, dynamic>.from(body);
 
         if (resultado['sessaoExpirada'] == true) {
           await limparSessao();
         }
 
-        throw Exception(
-          resultado['mensagem'] ??
-              'Erro ao buscar inscrições.',
-        );
+        throw Exception(resultado['mensagem'] ?? 'Erro ao buscar inscrições.');
       }
 
-      final dados =
-          List<dynamic>.from(
-        body,
-      );
+      if (body is! List) {
+        throw Exception('Resposta inválida ao buscar inscrições.');
+      }
 
-      return dados
-          .map(
-            (e) =>
-                Map<String, dynamic>.from(
-              e,
-            ),
-          )
-          .toList();
+      final dados = List<dynamic>.from(body);
+
+      return dados.map((e) => Map<String, dynamic>.from(e)).toList();
     } on TimeoutException {
-      throw Exception(
-        'Tempo de conexão esgotado.',
-      );
+      throw Exception('Tempo de conexão esgotado.');
     } catch (e) {
-      throw Exception(
-        'Erro ao buscar inscrições.\n$e',
-      );
+      throw Exception('Erro ao buscar inscrições.\n$e');
     }
   }
 
@@ -752,8 +695,7 @@ static Future<Map<String, dynamic>>
   // DADOS INICIAIS
   // ===================================================
 
-  static Future<Map<String, dynamic>>
-      buscarInicial({
+  static Future<Map<String, dynamic>> buscarInicial({
     required String codigo,
   }) async {
     try {
@@ -761,45 +703,34 @@ static Future<Map<String, dynamic>>
         return {
           'success': false,
           'sessaoExpirada': true,
-          'mensagem':
-              'Sessão não encontrada. Faça login novamente.',
+          'mensagem': 'Sessão não encontrada. Faça login novamente.',
         };
       }
 
-      final parametros =
-          StringBuffer(
+      final parametros = StringBuffer(
         '$baseUrl'
         '?tipo=inicial'
         '&codigo=${Uri.encodeComponent(codigo)}'
         '&sessionId=${Uri.encodeComponent(_sessionId!)}',
       );
 
-      parametros.write(
-        '&t=${DateTime.now().millisecondsSinceEpoch}',
-      );
+      parametros.write('&t=${DateTime.now().millisecondsSinceEpoch}');
 
-      final response =
-          await http
-              .get(
-                Uri.parse(
-                  parametros.toString(),
-                ),
-              )
-              .timeout(timeout);
+      final response = await http
+          .get(Uri.parse(parametros.toString()))
+          .timeout(timeout);
 
       if (response.statusCode != 200) {
-        throw Exception(
-          'Erro ao buscar dados iniciais.',
-        );
+        throw Exception('Erro ao buscar dados iniciais.');
       }
 
-      final body =
-          jsonDecode(response.body);
+      final body = jsonDecode(response.body);
 
-      final resultado =
-          Map<String, dynamic>.from(
-        body,
-      );
+      if (body is! Map) {
+        throw Exception('Resposta inválida ao buscar dados iniciais.');
+      }
+
+      final resultado = Map<String, dynamic>.from(body);
 
       if (resultado['sessaoExpirada'] == true) {
         await limparSessao();
@@ -807,286 +738,384 @@ static Future<Map<String, dynamic>>
 
       return resultado;
     } on TimeoutException {
-      throw Exception(
-        'Tempo de conexão esgotado.',
-      );
+      throw Exception('Tempo de conexão esgotado.');
     } catch (e) {
-      throw Exception(
-        'Erro ao buscar dados iniciais.\n$e',
-      );
+      throw Exception('Erro ao buscar dados iniciais.\n$e');
     }
   }
 
   // ===================================================
-  // RELATÓRIO
-  // ===================================================
+// RELATÓRIO ADMINISTRATIVO
+// ===================================================
 
-  static Future<List<dynamic>>
-      buscarInscricoesPDF() async {
-    try {
-      final url = Uri.parse(
-        '$baseUrl'
-        '?tipo=relatorio'
-        '&t=${DateTime.now().millisecondsSinceEpoch}',
+static Future<List<dynamic>> buscarInscricoesPDF() async {
+  try {
+    // =================================================
+    // PRIMEIRO:
+    // GARANTE QUE A SESSÃO SALVA FOI CARREGADA
+    // =================================================
+
+    await inicializarSessao();
+
+    // =================================================
+    // VERIFICA SE EXISTE SESSÃO
+    // =================================================
+
+    if (!possuiSessao) {
+      throw Exception(
+        'Sessão do administrador não encontrada. '
+        'Faça login novamente.',
+      );
+    }
+
+    // =================================================
+    // GUARDA OS DADOS DA SESSÃO
+    // =================================================
+
+    final codigo = _codigoSessao!;
+    final sessionId = _sessionId!;
+
+    debugPrint('==========================================');
+    debugPrint('RELATÓRIO ADMINISTRATIVO');
+    debugPrint('Código: $codigo');
+    debugPrint('Session ID: $sessionId');
+    debugPrint('==========================================');
+
+    // =================================================
+    // MONTA A URL
+    // =================================================
+
+    final url = Uri.parse(
+      '$baseUrl'
+      '?tipo=relatorio'
+      '&codigo=${Uri.encodeComponent(codigo)}'
+      '&sessionId=${Uri.encodeComponent(sessionId)}'
+      '&t=${DateTime.now().millisecondsSinceEpoch}',
+    );
+
+    debugPrint('Consultando relatório...');
+    debugPrint('URL: $url');
+
+    // =================================================
+    // CONSULTA O APPS SCRIPT
+    // =================================================
+
+    final response = await http
+        .get(url)
+        .timeout(timeout);
+
+    debugPrint(
+      'Relatório HTTP: ${response.statusCode}',
+    );
+
+    debugPrint(
+      'Relatório resposta: ${response.body}',
+    );
+
+    // =================================================
+    // ERRO HTTP
+    // =================================================
+
+    if (response.statusCode != 200) {
+      throw Exception(
+        'Erro ao buscar relatório. '
+        'Código HTTP: ${response.statusCode}',
+      );
+    }
+
+    // =================================================
+    // DECODIFICA
+    // =================================================
+
+    final body = jsonDecode(response.body);
+
+    // =================================================
+    // RESPOSTA NORMAL = LISTA
+    // =================================================
+
+    if (body is List) {
+      debugPrint(
+        'Relatório recebido com ${body.length} registros.',
       );
 
-      final response =
-          await http
-              .get(url)
-              .timeout(timeout);
+      return List<dynamic>.from(body);
+    }
 
-      if (response.statusCode != 200) {
+    // =================================================
+    // RESPOSTA EM MAP
+    // =================================================
+
+    if (body is Map) {
+      final resultado =
+          Map<String, dynamic>.from(body);
+
+      debugPrint(
+        'Relatório retornou MAP: $resultado',
+      );
+
+      // =================================================
+      // SESSÃO EXPIRADA
+      // =================================================
+
+      if (resultado['sessaoExpirada'] == true) {
+        await limparSessao();
+
         throw Exception(
-          'Erro ao buscar relatório.',
+          resultado['mensagem']?.toString() ??
+              'Sessão do administrador inválida ou encerrada.',
         );
       }
 
-      final body =
-          jsonDecode(response.body);
+      // =================================================
+      // PROCURA LISTA DENTRO DO MAP
+      // =================================================
 
-      return List<dynamic>.from(
-        body,
-      );
-    } on TimeoutException {
+      const possiveisChaves = [
+        'dados',
+        'inscricoes',
+        'lista',
+        'resultado',
+        'data',
+      ];
+
+      for (final chave in possiveisChaves) {
+        final valor = resultado[chave];
+
+        if (valor is List) {
+          debugPrint(
+            'Relatório encontrado na chave: $chave',
+          );
+
+          return List<dynamic>.from(valor);
+        }
+      }
+
+      // =================================================
+      // ERRO DEVOLVIDO PELO SERVIDOR
+      // =================================================
+
+      final mensagem =
+          resultado['mensagem'] ??
+          resultado['erro'] ??
+          resultado['error'];
+
+      if (mensagem != null) {
+        throw Exception(
+          mensagem.toString(),
+        );
+      }
+
+      // =================================================
+      // RESPOSTA INESPERADA
+      // =================================================
+
       throw Exception(
-        'Tempo de conexão esgotado.',
+        'O servidor retornou uma resposta inesperada ao buscar o relatório.',
       );
+    }
+
+    // =================================================
+    // TIPO INVÁLIDO
+    // =================================================
+
+    throw Exception(
+      'Resposta inválida ao buscar relatório.',
+    );
+
+  } on TimeoutException {
+    throw Exception(
+      'Tempo de conexão esgotado.',
+    );
+
+  } catch (e) {
+    debugPrint(
+      'ERRO RELATÓRIO: $e',
+    );
+
+    throw Exception(
+      'Erro ao buscar relatório.\n$e',
+    );
+  }
+}
+  // ===================================================
+  // HEARTBEAT
+  // ===================================================
+
+  static Future<bool> heartbeat() async {
+    // =================================================
+    // NÃO EXISTE SESSÃO LOCAL
+    // =================================================
+
+    if (!possuiSessao) {
+      return false;
+    }
+
+    try {
+      // =================================================
+      // MONTA URL
+      // =================================================
+
+      final url = Uri.parse(
+        '$baseUrl'
+        '?tipo=heartbeat'
+        '&codigo=${Uri.encodeComponent(_codigoSessao!)}'
+        '&sessionId=${Uri.encodeComponent(_sessionId!)}'
+        '&t=${DateTime.now().millisecondsSinceEpoch}',
+      );
+
+      // =================================================
+      // CONSULTA SERVIDOR
+      // =================================================
+
+      final response = await http.get(url).timeout(timeout);
+
+      // =================================================
+      // ERRO HTTP
+      //
+      // NÃO APAGA A SESSÃO.
+      // =================================================
+
+      if (response.statusCode != 200) {
+        return true;
+      }
+
+      // =================================================
+      // DECODIFICA
+      // =================================================
+
+      final body = jsonDecode(response.body);
+
+      if (body is! Map) {
+        return true;
+      }
+
+      final resultado = Map<String, dynamic>.from(body);
+
+      // =================================================
+      // SERVIDOR CONFIRMOU SESSÃO ATIVA
+      // =================================================
+
+      if (resultado['success'] == true) {
+        return true;
+      }
+
+      // =================================================
+      // SERVIDOR CONFIRMOU EXPIRAÇÃO
+      // =================================================
+
+      if (resultado['sessaoExpirada'] == true) {
+        await limparSessao();
+
+        return false;
+      }
+
+      // =================================================
+      // RESPOSTA INDETERMINADA
+      //
+      // NÃO APAGA A SESSÃO.
+      // =================================================
+
+      return true;
     } catch (e) {
-      throw Exception(
-        'Erro ao buscar relatório.\n$e',
+      // =================================================
+      // INTERNET / TIMEOUT
+      //
+      // NÃO APAGA A SESSÃO.
+      // =================================================
+
+      debugPrint('Heartbeat: erro de conexão: $e');
+
+      return true;
+    }
+  }
+
+  // ===================================================
+  // LOGOUT
+  // ===================================================
+
+  static Future<bool> logout() async {
+    // =================================================
+    // NÃO EXISTE SESSÃO
+    // =================================================
+
+    if (!possuiSessao) {
+      return true;
+    }
+
+    // =================================================
+    // GUARDA OS DADOS DA SESSÃO
+    // =================================================
+
+    final codigo = _codigoSessao!;
+
+    final sessao = _sessionId!;
+
+    try {
+      // =================================================
+      // MONTA URL
+      // =================================================
+
+      final url = Uri.parse(
+        '$baseUrl'
+        '?tipo=logout'
+        '&codigo=${Uri.encodeComponent(codigo)}'
+        '&sessionId=${Uri.encodeComponent(sessao)}'
+        '&t=${DateTime.now().millisecondsSinceEpoch}',
       );
-    }
-  }
 
- // ===================================================
-// HEARTBEAT
-// ===================================================
+      // =================================================
+      // ENVIA LOGOUT PARA O SERVIDOR
+      // =================================================
 
-static Future<bool> heartbeat() async {
+      final response = await http.get(url).timeout(const Duration(seconds: 10));
 
-  // =================================================
-  // NÃO EXISTE SESSÃO LOCAL
-  // =================================================
+      // =================================================
+      // ERRO HTTP
+      //
+      // NÃO APAGA A SESSÃO LOCAL.
+      // =================================================
 
-  if (!possuiSessao) {
-    return false;
-  }
+      if (response.statusCode != 200) {
+        return false;
+      }
 
-  try {
+      // =================================================
+      // DECODIFICA RESPOSTA
+      // =================================================
 
-    // =================================================
-    // MONTA URL
-    // =================================================
+      final body = jsonDecode(response.body);
 
-    final url = Uri.parse(
-      '$baseUrl'
-      '?tipo=heartbeat'
-      '&codigo=${Uri.encodeComponent(_codigoSessao!)}'
-      '&sessionId=${Uri.encodeComponent(_sessionId!)}'
-      '&t=${DateTime.now().millisecondsSinceEpoch}',
-    );
+      if (body is! Map) {
+        return false;
+      }
 
-    // =================================================
-    // CONSULTA SERVIDOR
-    // =================================================
+      final resultado = Map<String, dynamic>.from(body);
 
-    final response =
-        await http
-            .get(url)
-            .timeout(timeout);
+      // =================================================
+      // SERVIDOR CONFIRMOU LOGOUT
+      // =================================================
 
-    // =================================================
-    // ERRO HTTP
-    //
-    // NÃO APAGA A SESSÃO LOCAL.
-    //
-    // Pode ser uma falha temporária do servidor,
-    // internet ou redirecionamento.
-    // =================================================
+      if (resultado['success'] == true) {
+        await limparSessao();
 
-    if (response.statusCode != 200) {
+        return true;
+      }
 
-      return true;
-
-    }
-
-    // =================================================
-    // DECODIFICA RESPOSTA
-    // =================================================
-
-    final body =
-        jsonDecode(response.body);
-
-    final resultado =
-        Map<String, dynamic>.from(
-      body,
-    );
-
-    // =================================================
-    // SERVIDOR CONFIRMOU QUE A SESSÃO ESTÁ ATIVA
-    // =================================================
-
-    if (resultado['success'] == true) {
-
-      return true;
-
-    }
-
-    // =================================================
-    // SERVIDOR CONFIRMOU EXPLICITAMENTE
-    // QUE A SESSÃO FOI ENCERRADA
-    // =================================================
-
-    if (resultado['sessaoExpirada'] == true) {
-
-      await limparSessao();
+      // =================================================
+      // SERVIDOR NÃO CONFIRMOU
+      //
+      // MANTÉM A SESSÃO LOCAL.
+      // =================================================
 
       return false;
+    } catch (e) {
+      debugPrint('Logout: erro de conexão: $e');
 
-    }
-
-    // =================================================
-    // RESPOSTA INDETERMINADA
-    //
-    // NÃO APAGA A SESSÃO LOCAL.
-    // =================================================
-
-    return true;
-
-  } catch (e) {
-
-    // =================================================
-    // FALHA DE INTERNET / TIMEOUT
-    //
-    // NÃO APAGA A SESSÃO LOCAL.
-    //
-    // Isso permite que o navegador seja fechado
-    // e a sessão continue salva para tentativa
-    // de recuperação posteriormente.
-    // =================================================
-
-    debugPrint(
-      'Heartbeat: erro de conexão: $e',
-    );
-
-    return true;
-
-  }
-}
-
-
-// ===================================================
-// LOGOUT
-// ===================================================
-
-static Future<bool> logout() async {
-
-  // =================================================
-  // NÃO EXISTE SESSÃO
-  // =================================================
-
-  if (!possuiSessao) {
-    return true;
-  }
-
-  // =================================================
-  // GUARDA OS DADOS ANTES DA REQUISIÇÃO
-  // =================================================
-
-  final codigo =
-      _codigoSessao!;
-
-  final sessao =
-      _sessionId!;
-
-  try {
-
-    // =================================================
-    // MONTA URL
-    // =================================================
-
-    final url = Uri.parse(
-      '$baseUrl'
-      '?tipo=logout'
-      '&codigo=${Uri.encodeComponent(codigo)}'
-      '&sessionId=${Uri.encodeComponent(sessao)}'
-      '&t=${DateTime.now().millisecondsSinceEpoch}',
-    );
-
-    // =================================================
-    // ENVIA LOGOUT PARA O SERVIDOR
-    // =================================================
-
-    final response =
-        await http
-            .get(url)
-            .timeout(
-              const Duration(
-                seconds: 10,
-              ),
-            );
-
-    // =================================================
-    // ERRO HTTP
-    //
-    // NÃO APAGA A SESSÃO LOCAL.
-    // =================================================
-
-    if (response.statusCode != 200) {
+      // =================================================
+      // NÃO APAGA A SESSÃO LOCAL
+      // =================================================
 
       return false;
-
     }
-
-    // =================================================
-    // DECODIFICA RESPOSTA
-    // =================================================
-
-    final body =
-        jsonDecode(response.body);
-
-    final resultado =
-        Map<String, dynamic>.from(
-      body,
-    );
-
-    // =================================================
-    // SERVIDOR CONFIRMOU O LOGOUT
-    //
-    // AGORA SIM APAGA A SESSÃO LOCAL.
-    // =================================================
-
-    if (resultado['success'] == true) {
-
-      await limparSessao();
-
-      return true;
-
-    }
-
-    // =================================================
-    // SERVIDOR NÃO CONFIRMOU
-    //
-    // MANTÉM A SESSÃO LOCAL.
-    // =================================================
-
-    return false;
-
-  } catch (e) {
-
-    // =================================================
-    // ERRO DE INTERNET / TIMEOUT
-    //
-    // NÃO APAGA A SESSÃO LOCAL.
-    // =================================================
-
-    debugPrint(
-      'Logout: erro de conexão: $e',
-    );
-
-    return false;
-
   }
-}
-
 }

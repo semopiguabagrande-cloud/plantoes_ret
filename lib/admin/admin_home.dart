@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../screens/login_screen.dart';
+import '../services/api_service.dart';
 import 'inscricoes_screen.dart';
 import 'relatorios_screen.dart';
 import 'lista_presenca_screen.dart';
@@ -28,6 +29,110 @@ class AdminHome extends StatelessWidget {
           ),
         ),
         onPressed: onTap,
+      ),
+    );
+  }
+
+  // ===================================================
+  // SAIR DO ADMINISTRADOR
+  // ===================================================
+
+  Future<void> _logout(
+    BuildContext context,
+  ) async {
+    // Mostra confirmação antes de sair.
+    final confirmar = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text(
+            'Sair do sistema',
+          ),
+          content: const Text(
+            'Deseja realmente sair do painel administrativo?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(
+                  dialogContext,
+                  false,
+                );
+              },
+              child: const Text(
+                'CANCELAR',
+              ),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(
+                  dialogContext,
+                  true,
+                );
+              },
+              child: const Text(
+                'SAIR',
+              ),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmar != true) {
+      return;
+    }
+
+    // =================================================
+    // ENVIA LOGOUT PARA O SERVIDOR
+    //
+    // O ApiService só apaga a sessão local se o
+    // servidor confirmar o logout.
+    // =================================================
+
+    final sucesso =
+        await ApiService.logout();
+
+    if (!context.mounted) {
+      return;
+    }
+
+    // =================================================
+    // LOGOUT CONFIRMADO
+    // =================================================
+
+    if (sucesso) {
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(
+          builder: (_) =>
+              const LoginScreen(),
+        ),
+        (route) => false,
+      );
+
+      return;
+    }
+
+    // =================================================
+    // SERVIDOR NÃO CONFIRMOU
+    // =================================================
+
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(
+      const SnackBar(
+        backgroundColor: Colors.red,
+        duration: Duration(
+          seconds: 5,
+        ),
+        content: Text(
+          'Não foi possível registrar a saída no servidor. '
+          'Você continua conectado.',
+          style: TextStyle(
+            color: Colors.white,
+          ),
+        ),
       ),
     );
   }
@@ -63,15 +168,7 @@ class AdminHome extends StatelessWidget {
             ),
             tooltip: 'Sair',
             onPressed: () {
-              Navigator.pushAndRemoveUntil(
-                context,
-                MaterialPageRoute(
-                  builder:
-                      (_) =>
-                          const LoginScreen(),
-                ),
-                (route) => false,
-              );
+              _logout(context);
             },
           ),
         ],
@@ -142,7 +239,9 @@ class AdminHome extends StatelessWidget {
                     height: 50,
                   ),
 
-                  /// INSCRIÇÕES
+                  // =================================================
+                  // INSCRIÇÕES
+                  // =================================================
 
                   botao(
                     icone:
@@ -165,17 +264,22 @@ class AdminHome extends StatelessWidget {
                     height: 20,
                   ),
 
-                                 /// RELATÓRIO PDF
+                  // =================================================
+                  // RELATÓRIO PDF
+                  // =================================================
 
                   botao(
-                    icone: Icons.picture_as_pdf,
-                    titulo: 'RELATÓRIO GERAL PDF',
+                    icone:
+                        Icons.picture_as_pdf,
+                    titulo:
+                        'RELATÓRIO GERAL PDF',
                     onTap: () {
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (_) =>
-                              const RelatoriosScreen(),
+                          builder:
+                              (_) =>
+                                  const RelatoriosScreen(),
                         ),
                       );
                     },
@@ -185,17 +289,22 @@ class AdminHome extends StatelessWidget {
                     height: 20,
                   ),
 
-                  /// LISTA DE PRESENÇA
+                  // =================================================
+                  // LISTA DE PRESENÇA
+                  // =================================================
 
                   botao(
-                    icone: Icons.fact_check,
-                    titulo: 'LISTA DE PRESENÇA',
+                    icone:
+                        Icons.fact_check,
+                    titulo:
+                        'LISTA DE PRESENÇA',
                     onTap: () {
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (_) =>
-                              const ListaPresencaScreen(),
+                          builder:
+                              (_) =>
+                                  const ListaPresencaScreen(),
                         ),
                       );
                     },
