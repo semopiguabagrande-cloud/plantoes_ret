@@ -1,3 +1,4 @@
+
 name: plantao_ret
 description: Sistema de Plantões RET
 publish_to: "none"
@@ -16,6 +17,7 @@ dependencies:
   http: ^1.6.0
   intl: ^0.20.2
   shared_preferences: ^2.5.3
+  package_info_plus: ^8.3.0
 
   # PDF
   pdf: ^3.11.1
