@@ -1,3 +1,4 @@
+
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -53,14 +54,6 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
 
-    // IMPORTANTE:
-    // Aqui está o mês que o aplicativo está utilizando.
-    //
-    // Se o Apps Script estiver trabalhando com setembro,
-    // posteriormente podemos fazer o aplicativo receber
-    // automaticamente o mês/ano do servidor.
-    //
-    // NÃO alterei sua lógica de vagas aqui.
     anoAtual = '2026';
     mesAtual = '07';
 
@@ -70,25 +63,25 @@ class _HomeScreenState extends State<HomeScreen> {
     iniciar();
 
     _timerAtualizacao = Timer.periodic(
-  const Duration(seconds: 5),
-  (_) async {
-    if (!mounted || saindo) return;
+      const Duration(seconds: 5),
+      (_) async {
+        if (!mounted || saindo) return;
 
-    if (salvando || _atualizandoVagas) {
-      return;
-    }
+        if (salvando || _atualizandoVagas) {
+          return;
+        }
 
-    _atualizandoVagas = true;
+        _atualizandoVagas = true;
 
-    try {
-      await carregarVagas(
-        mostrarLoading: false,
-      );
-    } finally {
-      _atualizandoVagas = false;
-    }
-  },
-);
+        try {
+          await carregarVagas(
+            mostrarLoading: false,
+          );
+        } finally {
+          _atualizandoVagas = false;
+        }
+      },
+    );
   }
 
   // ===================================================
@@ -194,9 +187,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
     if (!mounted) return;
 
-    // IMPORTANTE:
-    // Remove TODAS as telas anteriores e cria
-    // explicitamente uma nova tela de login.
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(
         builder: (_) => const LoginScreen(),
@@ -225,12 +215,7 @@ class _HomeScreenState extends State<HomeScreen> {
       return;
     }
 
-    // =================================================
-    // CONFIRMAÇÃO
-    // =================================================
-
-    final confirmar =
-        await showDialog<bool>(
+    final confirmar = await showDialog<bool>(
       context: context,
       builder: (context) {
         return AlertDialog(
@@ -269,24 +254,12 @@ class _HomeScreenState extends State<HomeScreen> {
 
     if (!mounted) return;
 
-    // =================================================
-    // MARCA QUE ESTÁ SAINDO
-    // =================================================
-
     setState(() {
       saindo = true;
     });
 
-    // =================================================
-    // PARA O HEARTBEAT
-    // =================================================
-
     _timerAtualizacao?.cancel();
     _timerAtualizacao = null;
-
-    // =================================================
-    // MOSTRA CARREGAMENTO
-    // =================================================
 
     showDialog(
       context: context,
@@ -316,12 +289,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
 
     try {
-      // =================================================
-      // AVISA O SERVIDOR
-      // =================================================
-
-      final resultado =
-          await ApiService.logout();
+      final resultado = await ApiService.logout();
 
       debugPrint(
         'Logout: $resultado',
@@ -332,27 +300,11 @@ class _HomeScreenState extends State<HomeScreen> {
       );
     }
 
-    // =================================================
-    // LIMPA A SESSÃO LOCAL
-    // =================================================
-
     ApiService.limparSessao();
 
     if (!mounted) return;
 
-    // =================================================
-    // FECHA O "ENCERRANDO SESSÃO"
-    // =================================================
-
     Navigator.of(context).pop();
-
-    // =================================================
-    // VAI DIRETAMENTE PARA O LOGIN
-    //
-    // NÃO usamos popUntil(route.isFirst)
-    // porque isso poderia deixar o usuário
-    // em alguma tela anterior.
-    // =================================================
 
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(
@@ -415,25 +367,15 @@ class _HomeScreenState extends State<HomeScreen> {
 
       final dados =
           await ApiService.buscarInicial(
-        codigo:
-            widget.agente['codigo']
-                .toString(),
+        codigo: widget.agente['codigo'].toString(),
       );
 
       if (!mounted || saindo) return;
-
-      // =================================================
-      // SESSÃO ENCERRADA
-      // =================================================
 
       if (dados['sessaoExpirada'] == true) {
         await sessaoEncerrada();
         return;
       }
-
-      // =================================================
-      // ERRO
-      // =================================================
 
       if (dados['success'] != true) {
         throw Exception(
@@ -455,18 +397,12 @@ class _HomeScreenState extends State<HomeScreen> {
       if (!mounted || saindo) return;
 
       setState(() {
-        vagas =
-            List<dynamic>.from(
-          listaVagas,
-        );
+        vagas = List<dynamic>.from(listaVagas);
 
         selecionados =
             List<Map<String, dynamic>>.from(
           listaMinhas.map(
-            (e) =>
-                Map<String, dynamic>.from(
-              e,
-            ),
+            (e) => Map<String, dynamic>.from(e),
           ),
         );
 
@@ -498,52 +434,52 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   // ===================================================
-// CARREGAR VAGAS
-// ===================================================
+  // CARREGAR VAGAS
+  // ===================================================
 
-Future<void> carregarVagas({
-  bool mostrarLoading = true,
-}) async {
-  if (saindo) return;
+  Future<void> carregarVagas({
+    bool mostrarLoading = true,
+  }) async {
+    if (saindo) return;
 
-  try {
-    if (mounted) {
+    try {
+      if (mounted) {
+        setState(() {
+          if (mostrarLoading) {
+            carregando = true;
+          } else {
+            sincronizando = true;
+          }
+        });
+      }
+
+      final dados = await ApiService.buscarVagas(
+        ano: anoAtual,
+        mes: mesAtual,
+      );
+
+      if (!mounted || saindo) return;
+
       setState(() {
-        if (mostrarLoading) {
-          carregando = true;
-        } else {
-          sincronizando = true;
-        }
+        vagas = List<dynamic>.from(dados);
+
+        carregando = false;
+        sincronizando = false;
       });
+    } catch (e) {
+      if (!mounted || saindo) return;
+
+      setState(() {
+        carregando = false;
+        sincronizando = false;
+      });
+
+      debugPrint(
+        'Erro ao atualizar vagas: $e',
+      );
     }
-
-    final dados = await ApiService.buscarVagas(
-      ano: anoAtual,
-      mes: mesAtual,
-    );
-
-    if (!mounted || saindo) return;
-
-    setState(() {
-      vagas = List<dynamic>.from(dados);
-
-      carregando = false;
-      sincronizando = false;
-    });
-
-  } catch (e) {
-    if (!mounted || saindo) return;
-
-    setState(() {
-      carregando = false;
-      sincronizando = false;
-    });
-
-    debugPrint(
-      'Erro ao atualizar vagas: $e',
-    );
   }
-}
+
   // ===================================================
   // SELECIONAR
   // ===================================================
@@ -554,8 +490,7 @@ Future<void> carregarVagas({
   ) {
     if (saindo) return;
 
-    final existe =
-        selecionados.any(
+    final existe = selecionados.any(
       (e) =>
           e['data'] == data &&
           e['turno'] == turno,
@@ -573,8 +508,7 @@ Future<void> carregarVagas({
       return;
     }
 
-    if (selecionados.length >=
-        limitePlantao) {
+    if (selecionados.length >= limitePlantao) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           backgroundColor: Colors.red,
@@ -611,8 +545,7 @@ Future<void> carregarVagas({
     });
 
     try {
-      final cronometro =
-          Stopwatch()..start();
+      final cronometro = Stopwatch()..start();
 
       await carregarVagas(
         mostrarLoading: false,
@@ -620,28 +553,22 @@ Future<void> carregarVagas({
 
       if (!mounted || saindo) return;
 
-      final adicionar =
-          selecionados.where(
+      final adicionar = selecionados.where(
         (item) {
           return !inscricoesOriginais.any(
             (x) =>
-                x['data'] ==
-                    item['data'] &&
-                x['turno'] ==
-                    item['turno'],
+                x['data'] == item['data'] &&
+                x['turno'] == item['turno'],
           );
         },
       ).toList();
 
-      final remover =
-          inscricoesOriginais.where(
+      final remover = inscricoesOriginais.where(
         (item) {
           return !selecionados.any(
             (x) =>
-                x['data'] ==
-                    item['data'] &&
-                x['turno'] ==
-                    item['turno'],
+                x['data'] == item['data'] &&
+                x['turno'] == item['turno'],
           );
         },
       ).toList();
@@ -651,21 +578,18 @@ Future<void> carregarVagas({
       // =================================================
 
       for (final item in adicionar) {
-        final vaga =
-            vagas.firstWhere(
+        final vaga = vagas.firstWhere(
           (e) =>
               e['data'].toString() ==
               item['data'].toString(),
         );
 
-        final turno =
-            item['turno'].toString();
+        final turno = item['turno'].toString();
 
         if (turno == 'DIA') {
           final restantes =
               int.tryParse(
-                    vaga['restantesDia']
-                        .toString(),
+                    vaga['restantesDia'].toString(),
                   ) ??
                   0;
 
@@ -681,8 +605,7 @@ Future<void> carregarVagas({
         if (turno == 'NOITE') {
           final restantes =
               int.tryParse(
-                    vaga['restantesNoite']
-                        .toString(),
+                    vaga['restantesNoite'].toString(),
                   ) ??
                   0;
 
@@ -702,9 +625,7 @@ Future<void> carregarVagas({
 
       if (remover.isNotEmpty) {
         await ApiService.cancelarInscricao(
-          codigo:
-              widget.agente['codigo']
-                  .toString(),
+          codigo: widget.agente['codigo'].toString(),
           datas: remover,
         );
       }
@@ -723,15 +644,9 @@ Future<void> carregarVagas({
             await ApiService.salvarInscricao(
           ano: anoAtual,
           mes: mesAtual,
-          codigo:
-              widget.agente['codigo']
-                  .toString(),
-          matricula:
-              widget.agente['matricula']
-                  .toString(),
-          nome:
-              widget.agente['nome']
-                  .toString(),
+          codigo: widget.agente['codigo'].toString(),
+          matricula: widget.agente['matricula'].toString(),
+          nome: widget.agente['nome'].toString(),
           datas: adicionar,
         );
 
@@ -740,45 +655,37 @@ Future<void> carregarVagas({
           '${cronometro.elapsedMilliseconds} ms',
         );
 
-       if (resposta['success'] != true) {
-  final dataErro =
-      resposta['data']?.toString();
+        if (resposta['success'] != true) {
+          final dataErro = resposta['data']?.toString();
 
-  final turnoErro =
-      resposta['turno']?.toString();
+          final turnoErro = resposta['turno']?.toString();
 
-  // ===============================================
-  // REMOVE AUTOMATICAMENTE A VAGA QUE FOI RECUSADA
-  // ===============================================
+          if (dataErro != null && turnoErro != null) {
+            if (mounted) {
+              setState(() {
+                selecionados.removeWhere(
+                  (e) =>
+                      e['data'].toString() == dataErro &&
+                      e['turno']
+                              .toString()
+                              .toUpperCase() ==
+                          turnoErro.toUpperCase(),
+                );
+              });
+            }
+          }
 
-  if (dataErro != null &&
-      turnoErro != null) {
-    if (mounted) {
-      setState(() {
-        selecionados.removeWhere(
-          (e) =>
-              e['data'].toString() ==
-                  dataErro &&
-              e['turno'].toString().toUpperCase() ==
-                  turnoErro.toUpperCase(),
-        );
-      });
-    }
-  }
+          await carregarInicial(
+            mostrarLoading: false,
+          );
 
-  // Atualiza as vagas e as inscrições
-  // depois de retirar a marcação
-  await carregarInicial(
-    mostrarLoading: false,
-  );
           if (!mounted || saindo) return;
 
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               backgroundColor: Colors.red,
               content: Text(
-                resposta['mensagem']
-                        ?.toString() ??
+                resposta['mensagem']?.toString() ??
                     'Erro ao salvar.',
               ),
             ),
@@ -845,15 +752,12 @@ Future<void> carregarVagas({
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xff021426),
-
       appBar: AppBar(
         backgroundColor: const Color(0xff00162f),
         centerTitle: true,
-
         title: const Text(
           'PLANTÕES RET',
         ),
-
         actions: [
           if (sincronizando)
             const Padding(
@@ -871,24 +775,17 @@ Future<void> carregarVagas({
                 ),
               ),
             ),
-
-          // =================================================
-          // BOTÃO SAIR
-          // =================================================
-
           IconButton(
             tooltip: 'Sair',
             icon: const Icon(
               Icons.logout,
             ),
-            onPressed:
-                (salvando || saindo)
-                    ? null
-                    : fazerLogout,
+            onPressed: (salvando || saindo)
+                ? null
+                : fazerLogout,
           ),
         ],
       ),
-
       body: carregando
           ? const Center(
               child: CircularProgressIndicator(),
@@ -897,261 +794,154 @@ Future<void> carregarVagas({
               padding: EdgeInsets.all(
                 desktop ? 30 : 20,
               ),
-
               child: Column(
                 children: [
                   Card(
                     color: Colors.white10,
-
                     child: Padding(
-                      padding:
-                          const EdgeInsets.all(20),
-
+                      padding: const EdgeInsets.all(20),
                       child: Column(
                         children: [
                           Text(
-                            widget.agente[
-                                    'nome'] ??
-                                '',
+                            widget.agente['nome'] ?? '',
                             style: TextStyle(
-                              fontSize:
-                                  desktop
-                                      ? 30
-                                      : 24,
-                              fontWeight:
-                                  FontWeight.bold,
+                              fontSize: desktop ? 30 : 24,
+                              fontWeight: FontWeight.bold,
                             ),
                           ),
-
-                          const SizedBox(
-                            height: 10,
-                          ),
-
+                          const SizedBox(height: 10),
                           Text(
                             'Matrícula: '
                             '${widget.agente['matricula']}',
                           ),
-
-                          const SizedBox(
-                            height: 10,
-                          ),
-
+                          const SizedBox(height: 10),
                           Text(
                             'Plantões '
                             '${selecionados.length}'
                             '/$limitePlantao',
-                            style:
-                                const TextStyle(
-                              color:
-                                  Colors.amber,
-                              fontWeight:
-                                  FontWeight.bold,
+                            style: const TextStyle(
+                              color: Colors.amber,
+                              fontWeight: FontWeight.bold,
                             ),
                           ),
-
-                          const SizedBox(
-                            height: 20,
-                          ),
-
+                          const SizedBox(height: 20),
                           Container(
-                            width:
-                                double.infinity,
-
+                            width: double.infinity,
                             height: 58,
+                            alignment: Alignment.centerLeft,
+                            child: selecionados.isEmpty
+                                ? const Center(
+                                    child: Text(
+                                      'Nenhum plantão selecionado',
+                                      style: TextStyle(
+                                        color: Colors.white70,
+                                      ),
+                                    ),
+                                  )
+                                : Builder(
+                                    builder: (context) {
+                                      final lista =
+                                          List<Map<String, dynamic>>.from(
+                                        selecionados,
+                                      );
 
-                            alignment:
-                                Alignment.centerLeft,
-
-                            child:
-                                selecionados
-                                        .isEmpty
-                                    ? const Center(
-                                        child:
-                                            Text(
-                                          'Nenhum plantão selecionado',
-                                          style:
-                                              TextStyle(
-                                            color:
-                                                Colors.white70,
-                                          ),
-                                        ),
-                                      )
-                                    : Builder(
-                                        builder:
-                                            (context) {
-                                          final lista =
-                                              List<Map<String, dynamic>>.from(
-                                            selecionados,
+                                      lista.sort(
+                                        (a, b) {
+                                          final da = DateTime.parse(
+                                            a['data']
+                                                .toString()
+                                                .split('/')
+                                                .reversed
+                                                .join('-'),
                                           );
 
-                                          lista.sort(
-                                            (a, b) {
-                                              final da =
-                                                  DateTime.parse(
-                                                a['data']
-                                                    .toString()
-                                                    .split(
-                                                      '/',
-                                                    )
-                                                    .reversed
-                                                    .join(
-                                                      '-',
-                                                    ),
-                                              );
-
-                                              final db =
-                                                  DateTime.parse(
-                                                b['data']
-                                                    .toString()
-                                                    .split(
-                                                      '/',
-                                                    )
-                                                    .reversed
-                                                    .join(
-                                                      '-',
-                                                    ),
-                                              );
-
-                                              return da.compareTo(
-                                                db,
-                                              );
-                                            },
+                                          final db = DateTime.parse(
+                                            b['data']
+                                                .toString()
+                                                .split('/')
+                                                .reversed
+                                                .join('-'),
                                           );
 
-                                          return ListView.separated(
-                                            scrollDirection:
-                                                Axis.horizontal,
+                                          return da.compareTo(db);
+                                        },
+                                      );
 
-                                            physics:
-                                                const BouncingScrollPhysics(),
+                                      return ListView.separated(
+                                        scrollDirection: Axis.horizontal,
+                                        physics:
+                                            const BouncingScrollPhysics(),
+                                        itemCount: lista.length,
+                                        separatorBuilder: (_, _) =>
+                                            const SizedBox(width: 8),
+                                        itemBuilder: (context, index) {
+                                          final e = lista[index];
 
-                                            itemCount:
-                                                lista.length,
-
-                                            separatorBuilder:
-                                                (
-                                              _,
-                                              __,
-                                            ) =>
-                                                const SizedBox(
-                                              width:
-                                                  8,
-                                            ),
-
-                                            itemBuilder:
-                                                (
-                                              context,
-                                              index,
-                                            ) {
-                                              final e =
-                                                  lista[index];
-
-                                              return Center(
-                                                child:
-                                                    Chip(
-                                                  backgroundColor:
-                                                      Colors.white10,
-
-                                                  label:
-                                                      Text(
-                                                    '${e['data']} '
-                                                    '(${e['turno']})',
-                                                    overflow:
-                                                        TextOverflow.ellipsis,
-                                                    style:
-                                                        const TextStyle(
-                                                      color:
-                                                          Colors.white,
-                                                    ),
-                                                  ),
+                                          return Center(
+                                            child: Chip(
+                                              backgroundColor:
+                                                  Colors.white10,
+                                              label: Text(
+                                                '${e['data']} '
+                                                '(${e['turno']})',
+                                                overflow:
+                                                    TextOverflow.ellipsis,
+                                                style: const TextStyle(
+                                                  color: Colors.white,
                                                 ),
-                                              );
-                                            },
+                                              ),
+                                            ),
                                           );
                                         },
-                                      ),
+                                      );
+                                    },
+                                  ),
                           ),
                         ],
                       ),
                     ),
                   ),
-
-                  const SizedBox(
-                    height: 20,
-                  ),
-
+                  const SizedBox(height: 20),
                   Expanded(
-                    child:
-                        desktop
-                            ? GridView.builder(
-                                gridDelegate:
-                                    const SliverGridDelegateWithFixedCrossAxisCount(
-                                  crossAxisCount:
-                                      2,
-                                  childAspectRatio:
-                                      1.7,
-                                  crossAxisSpacing:
-                                      15,
-                                  mainAxisSpacing:
-                                      15,
-                                ),
-                                itemCount:
-                                    vagas.length,
-                                itemBuilder:
-                                    montarCard,
-                              )
-                            : ListView.builder(
-                                itemCount:
-                                    vagas.length,
-                                itemBuilder:
-                                    montarCard,
-                              ),
+                    child: desktop
+                        ? GridView.builder(
+                            gridDelegate:
+                                const SliverGridDelegateWithFixedCrossAxisCount(
+                              crossAxisCount: 2,
+                              childAspectRatio: 1.7,
+                              crossAxisSpacing: 15,
+                              mainAxisSpacing: 15,
+                            ),
+                            itemCount: vagas.length,
+                            itemBuilder: montarCard,
+                          )
+                        : ListView.builder(
+                            itemCount: vagas.length,
+                            itemBuilder: montarCard,
+                          ),
                   ),
-
-                  const SizedBox(
-                    height: 10,
-                  ),
-
+                  const SizedBox(height: 10),
                   Padding(
-                    padding:
-                        EdgeInsets.only(
+                    padding: EdgeInsets.only(
                       bottom:
-                          MediaQuery.of(
-                                context,
-                              )
-                              .padding
-                              .bottom +
-                          10,
+                          MediaQuery.of(context).padding.bottom + 10,
                     ),
-
                     child: SizedBox(
-                      width:
-                          double.infinity,
-
-                      height:
-                          60,
-
-                      child:
-                          ElevatedButton(
-                        onPressed:
-                            (salvando ||
-                                    saindo)
-                                ? null
-                                : salvarEscolhas,
-
-                        child:
-                            salvando
-                                ? const SizedBox(
-                                    height:
-                                        30,
-                                    width:
-                                        30,
-                                    child:
-                                        CircularProgressIndicator(),
-                                  )
-                                : const Text(
-                                    'SALVAR ALTERAÇÕES',
-                                  ),
+                      width: double.infinity,
+                      height: 60,
+                      child: ElevatedButton(
+                        onPressed: (salvando || saindo)
+                            ? null
+                            : salvarEscolhas,
+                        child: salvando
+                            ? const SizedBox(
+                                height: 30,
+                                width: 30,
+                                child: CircularProgressIndicator(),
+                              )
+                            : const Text(
+                                'SALVAR ALTERAÇÕES',
+                              ),
                       ),
                     ),
                   ),
@@ -1169,23 +959,19 @@ Future<void> carregarVagas({
     BuildContext context,
     int i,
   ) {
-    final vaga =
-        vagas[i];
+    final vaga = vagas[i];
 
-    final data =
-        vaga['data'].toString();
+    final data = vaga['data'].toString();
 
     final restantesDia =
         int.tryParse(
-              vaga['restantesDia']
-                  .toString(),
+              vaga['restantesDia'].toString(),
             ) ??
             0;
 
     final restantesNoite =
         int.tryParse(
-              vaga['restantesNoite']
-                  .toString(),
+              vaga['restantesNoite'].toString(),
             ) ??
             0;
 
@@ -1195,111 +981,62 @@ Future<void> carregarVagas({
                 .toLowerCase() ==
             'true';
 
-    final marcadoDia =
-        selecionados.any(
+    final marcadoDia = selecionados.any(
       (e) =>
-          e['data'] ==
-              data &&
-          e['turno'] ==
-              'DIA',
+          e['data'] == data &&
+          e['turno'] == 'DIA',
     );
 
-    final marcadoNoite =
-        selecionados.any(
+    final marcadoNoite = selecionados.any(
       (e) =>
-          e['data'] ==
-              data &&
-          e['turno'] ==
-              'NOITE',
+          e['data'] == data &&
+          e['turno'] == 'NOITE',
     );
 
     return Card(
-      color:
-          Colors.white10,
-
+      color: Colors.white10,
       child: Padding(
-        padding:
-            const EdgeInsets.all(
-          15,
-        ),
-
+        padding: const EdgeInsets.all(15),
         child: Column(
-          crossAxisAlignment:
-              CrossAxisAlignment.start,
-
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
               data,
-              style:
-                  const TextStyle(
-                fontSize:
-                    18,
-                fontWeight:
-                    FontWeight.bold,
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
               ),
             ),
-
             CheckboxListTile(
-              dense:
-                  true,
-
-              contentPadding:
-                  EdgeInsets.zero,
-
-              value:
-                  marcadoDia,
-
-              title:
-                  Text(
-                restantesDia <= 0 &&
-                        !marcadoDia
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              value: marcadoDia,
+              title: Text(
+                restantesDia <= 0 && !marcadoDia
                     ? 'DIA - ESGOTADO'
-                    : 'DIA - Restantes: '
-                        '$restantesDia',
+                    : 'DIA - Restantes: $restantesDia',
               ),
-
-              onChanged:
-                  restantesDia <= 0 &&
-                          !marcadoDia
-                      ? null
-                      : (_) {
-                          selecionar(
-                            data,
-                            'DIA',
-                          );
-                        },
+              onChanged: restantesDia <= 0 && !marcadoDia
+                  ? null
+                  : (_) {
+                      selecionar(data, 'DIA');
+                    },
             ),
-
             if (possuiNoite)
               CheckboxListTile(
-                dense:
-                    true,
-
-                contentPadding:
-                    EdgeInsets.zero,
-
-                value:
-                    marcadoNoite,
-
-                title:
-                    Text(
-                  restantesNoite <= 0 &&
-                          !marcadoNoite
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                value: marcadoNoite,
+                title: Text(
+                  restantesNoite <= 0 && !marcadoNoite
                       ? 'NOITE - ESGOTADO'
-                      : 'NOITE - Restantes: '
-                          '$restantesNoite',
+                      : 'NOITE - Restantes: $restantesNoite',
                 ),
-
-                onChanged:
-                    restantesNoite <= 0 &&
-                            !marcadoNoite
-                        ? null
-                        : (_) {
-                            selecionar(
-                              data,
-                              'NOITE',
-                            );
-                          },
+                onChanged: restantesNoite <= 0 && !marcadoNoite
+                    ? null
+                    : (_) {
+                        selecionar(data, 'NOITE');
+                      },
               ),
           ],
         ),

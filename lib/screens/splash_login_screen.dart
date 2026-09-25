@@ -1,3 +1,4 @@
+
 import 'package:flutter/material.dart';
 
 import '../services/api_service.dart';
@@ -14,9 +15,7 @@ class SplashLoginScreen extends StatefulWidget {
       _SplashLoginScreenState();
 }
 
-class _SplashLoginScreenState
-    extends State<SplashLoginScreen> {
-
+class _SplashLoginScreenState extends State<SplashLoginScreen> {
   bool mostrarLogin = false;
 
   bool carregandoSessao = true;
@@ -29,64 +28,51 @@ class _SplashLoginScreenState
   }
 
   // ===================================================
-  // RECUPERAR SESSÃO AO ABRIR O APLICATIVO
+  // RECUPERAR SESSÃƒO AO ABRIR O APLICATIVO
   // ===================================================
 
   Future<void> recuperarSessao() async {
-
     try {
-
       debugPrint(
         '========================================',
       );
 
       debugPrint(
-        'INICIANDO RECUPERAÇÃO DA SESSÃO',
+        'INICIANDO RECUPERAÃ‡ÃƒO DA SESSÃƒO',
       );
 
       debugPrint(
         '========================================',
       );
 
-
       // =================================================
-      // TENTA RECUPERAR A SESSÃO SALVA
+      // TENTA RECUPERAR A SESSÃƒO SALVA
       // =================================================
 
-      final resultado =
-          await ApiService.recuperarSessao();
-
+      final resultado = await ApiService.recuperarSessao();
 
       debugPrint(
-        'Resultado recuperação: $resultado',
+        'Resultado recuperaÃ§Ã£o: $resultado',
       );
-
 
       if (!mounted) {
         return;
       }
 
-
       // =================================================
-      // SESSÃO ENCONTRADA E VÁLIDA
+      // SESSÃƒO ENCONTRADA E VÃLIDA
       // =================================================
 
-      if (
-        resultado['success'] == true &&
-        resultado['sessaoRecuperada'] == true &&
-        resultado['agente'] is Map
-      ) {
-
+      if (resultado['success'] == true &&
+          resultado['sessaoRecuperada'] == true &&
+          resultado['agente'] is Map) {
         debugPrint(
-          'SESSÃO RECUPERADA COM SUCESSO.',
+          'SESSÃƒO RECUPERADA COM SUCESSO.',
         );
 
-
-        final agente =
-            Map<String, dynamic>.from(
+        final agente = Map<String, dynamic>.from(
           resultado['agente'],
         );
-
 
         // =================================================
         // ENTRA DIRETAMENTE NA HOME
@@ -94,75 +80,56 @@ class _SplashLoginScreenState
 
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(
-            builder: (_) =>
-                HomeScreen(
+            builder: (_) => HomeScreen(
               agente: agente,
             ),
           ),
         );
 
-
         return;
-
       }
 
-
       // =================================================
-      // NÃO EXISTE SESSÃO VÁLIDA
+      // NÃƒO EXISTE SESSÃƒO VÃLIDA
       // MOSTRA LOGIN
       // =================================================
 
       debugPrint(
-        'Nenhuma sessão válida encontrada.',
+        'Nenhuma sessÃ£o vÃ¡lida encontrada.',
       );
-
 
       if (!mounted) {
         return;
       }
-
 
       setState(() {
-
         carregandoSessao = false;
-
         mostrarLogin = true;
-
       });
-
     } catch (e) {
-
       debugPrint(
-        'ERRO AO RECUPERAR SESSÃO: $e',
+        'ERRO AO RECUPERAR SESSÃƒO: $e',
       );
-
 
       if (!mounted) {
         return;
       }
-
 
       // =================================================
       // EM CASO DE ERRO
       //
       // Mostra o login.
       //
-      // A ApiService é responsável por decidir
-      // se deve ou não apagar a sessão local.
+      // A ApiService Ã© responsÃ¡vel por decidir
+      // se deve ou nÃ£o apagar a sessÃ£o local.
       // =================================================
 
       setState(() {
-
         carregandoSessao = false;
-
         mostrarLogin = true;
-
       });
-
     }
-
   }
-
 
   // ===================================================
   // DESKTOP
@@ -171,146 +138,83 @@ class _SplashLoginScreenState
   bool get isDesktop =>
       MediaQuery.of(context).size.width >= 800;
 
-
   // ===================================================
   // BUILD
   // ===================================================
 
   @override
-  Widget build(
-    BuildContext context,
-  ) {
-
+  Widget build(BuildContext context) {
     return Scaffold(
-
       body: Stack(
-
         children: [
-
           // =================================================
           // FUNDO
           // =================================================
 
           Positioned.fill(
-
             child: Image.asset(
-
               isDesktop
                   ? 'assets/images/pc_login_bg.png'
                   : 'assets/images/mobile_login_bg.png',
-
               fit: BoxFit.cover,
-
             ),
-
           ),
-
 
           // =================================================
           // ESCURECIMENTO DO LOGIN
           // =================================================
 
           Positioned.fill(
-
             child: AnimatedContainer(
-
-              duration:
-                  const Duration(
+              duration: const Duration(
                 milliseconds: 800,
               ),
-
-              curve:
-                  Curves.easeInOut,
-
-              color:
-                  mostrarLogin
-                      ? Colors.black.withOpacity(.35)
-                      : Colors.transparent,
-
+              curve: Curves.easeInOut,
+              color: mostrarLogin
+                  ? Colors.black.withValues(alpha: .35)
+                  : Colors.transparent,
             ),
-
           ),
 
-
           // =================================================
-          // INDICADOR ENQUANTO RECUPERA A SESSÃO
+          // INDICADOR ENQUANTO RECUPERA A SESSÃƒO
           // =================================================
 
           if (carregandoSessao)
-
             const Center(
-
               child: SizedBox(
-
                 width: 40,
-
                 height: 40,
-
-                child:
-                    CircularProgressIndicator(),
-
+                child: CircularProgressIndicator(),
               ),
-
             ),
-
 
           // =================================================
           // LOGIN
           // =================================================
 
           if (mostrarLogin)
-
             SafeArea(
-
               child: Center(
-
                 child: AnimatedOpacity(
-
-                  duration:
-                      const Duration(
+                  duration: const Duration(
                     milliseconds: 900,
                   ),
-
-                  curve:
-                      Curves.easeInOut,
-
-                  opacity:
-                      mostrarLogin
-                          ? 1
-                          : 0,
-
+                  curve: Curves.easeInOut,
+                  opacity: mostrarLogin ? 1 : 0,
                   child: AnimatedScale(
-
-                    duration:
-                        const Duration(
+                    duration: const Duration(
                       milliseconds: 900,
                     ),
-
-                    curve:
-                        Curves.easeOutBack,
-
-                    scale:
-                        mostrarLogin
-                            ? 1
-                            : .85,
-
-                    child:
-                        const LoginScreen(),
-
+                    curve: Curves.easeOutBack,
+                    scale: mostrarLogin ? 1 : .85,
+                    child: const LoginScreen(),
                   ),
-
                 ),
-
               ),
-
             ),
-
         ],
-
       ),
-
     );
-
   }
-
 }
