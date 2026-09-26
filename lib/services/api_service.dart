@@ -11,8 +11,9 @@ class ApiService {
   // GOOGLE APPS SCRIPT
   // ===================================================
 
+  
   static const String baseUrl =
-      'https://script.google.com/macros/s/AKfycbwtvlBfdqbpDZKwS5PQOAdBJWC7GVNjkKhoFylG8PPE-p2ZKt0gJhjdiDL3-PF2lJrhsQ/exec';
+      'https://script.google.com/macros/s/AKfycbxUydz1Uc6JAUBLx0yrperCnh6b0pH-7hiuUTNVU3oWScLQGEPhFAmxKKg8bxwt8OHWEw/exec';
 
   static const Duration timeout = Duration(seconds: 30);
 
@@ -41,7 +42,7 @@ class ApiService {
   // ===================================================
 
   static const String _chaveTentativaLogin = 'login_tentativa_id';
-  static const String _chaveCodigoTentativaLogin =
+  static const String _chaveTentativaCodigo =
       'login_tentativa_codigo';
 
   // ===================================================
@@ -65,6 +66,40 @@ class ApiService {
       _codigoSessao!.isNotEmpty &&
       _sessionId != null &&
       _sessionId!.isNotEmpty;
+
+  // ===================================================
+  // REQUEST COM RETRY (internet lenta)
+  //
+  // Repete a requisição em caso de timeout. É seguro
+  // nas chamadas de LEITURA/RENOVAÇÃO, porque o servidor
+  // é idempotente nelas (mesma tentativa/dispositivo =
+  // adota a sessão; leitura não altera nada).
+  //
+  // NÃO usamos nas ESCRITAS (salvar/cancelar) para não
+  // arriscar duplicar plantão.
+  // ===================================================
+
+  static Future<http.Response> _getComRetry(
+    Uri url, {
+    int tentativas = 3,
+    Duration intervalo = const Duration(seconds: 2),
+  }) async {
+    for (int i = 0; i < tentativas; i++) {
+      try {
+        return await http.get(url).timeout(timeout);
+      } on TimeoutException {
+        debugPrint(
+          'Timeout na tentativa ${i + 1}/$tentativas...',
+        );
+
+        if (i == tentativas - 1) rethrow;
+
+        await Future.delayed(intervalo);
+      }
+    }
+
+    throw Exception('Falha de conexão.');
+  }
 
   // ===================================================
   // NORMALIZAÇÃO DE CÓDIGO
@@ -177,7 +212,7 @@ class ApiService {
     final prefs = await SharedPreferences.getInstance();
 
     final codigoTentativa =
-        prefs.getString(_chaveCodigoTentativaLogin);
+        prefs.getString(_chaveTentativaCodigo);
     final tentativaExistente = prefs.getString(_chaveTentativaLogin);
 
     if (codigoTentativa == codigo &&
@@ -188,7 +223,7 @@ class ApiService {
 
     final novaTentativa = _gerarTentativaId();
 
-    await prefs.setString(_chaveCodigoTentativaLogin, codigo);
+    await prefs.setString(_chaveTentativaCodigo, codigo);
     await prefs.setString(_chaveTentativaLogin, novaTentativa);
 
     return novaTentativa;
@@ -202,7 +237,7 @@ class ApiService {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove(_chaveTentativaLogin);
-      await prefs.remove(_chaveCodigoTentativaLogin);
+      await prefs.remove(_chaveTentativaCodigo);
     } catch (e) {
       debugPrint('Limpar tentativa de login: erro: $e');
     }
@@ -249,7 +284,10 @@ class ApiService {
         '&t=${DateTime.now().millisecondsSinceEpoch}',
       );
 
-      final response = await http.get(url).timeout(timeout);
+      // Retry: em internet lenta o login INSISTE.
+      // Como o servidor reconhece a mesma tentativa/
+      // dispositivo, ele ADOTA a sessão já criada.
+      final response = await _getComRetry(url);
 
       debugPrint('Login HTTP: ${response.statusCode}');
       debugPrint('Login resposta: ${response.body}');
@@ -332,7 +370,9 @@ class ApiService {
         '&t=${DateTime.now().millisecondsSinceEpoch}',
       );
 
-      final response = await http.get(url).timeout(timeout);
+      // Retry também aqui: abrir o app em rede lenta
+      // não deve travar.
+      final response = await _getComRetry(url);
 
       if (response.statusCode != 200) {
         return {
@@ -423,7 +463,7 @@ class ApiService {
 
       final url = Uri.parse(parametros.toString());
 
-      final response = await http.get(url).timeout(timeout);
+      final response = await _getComRetry(url);
 
       if (response.statusCode != 200) {
         throw Exception('Erro ao buscar vagas.');
@@ -463,6 +503,11 @@ class ApiService {
 
   // ===================================================
   // SALVAR INSCRIÇÃO
+  //
+  // SEM retry de propósito: repetir uma escrita pode
+  // duplicar plantão. O servidor é idempotente (recusa
+  // "já tem plantão no dia"), mas por segurança a
+  // escrita fica com tentativa única.
   // ===================================================
 
   static Future<Map<String, dynamic>> salvarInscricao({
@@ -530,6 +575,10 @@ class ApiService {
 
   // ===================================================
   // CANCELAR INSCRIÇÃO
+  //
+  // Cancelamento é idempotente no servidor (só apaga o
+  // que existe), mas mantemos tentativa única por
+  // simplicidade e previsibilidade.
   // ===================================================
 
   static Future<Map<String, dynamic>> cancelarInscricao({
@@ -607,9 +656,9 @@ class ApiService {
       parametros.write(identificacaoCliente);
       parametros.write('&t=${DateTime.now().millisecondsSinceEpoch}');
 
-      final response = await http
-          .get(Uri.parse(parametros.toString()))
-          .timeout(timeout);
+      final response = await _getComRetry(
+        Uri.parse(parametros.toString()),
+      );
 
       if (response.statusCode != 200) {
         throw Exception('Erro ao buscar inscrições.');
@@ -672,9 +721,9 @@ class ApiService {
       parametros.write(identificacaoCliente);
       parametros.write('&t=${DateTime.now().millisecondsSinceEpoch}');
 
-      final response = await http
-          .get(Uri.parse(parametros.toString()))
-          .timeout(timeout);
+      final response = await _getComRetry(
+        Uri.parse(parametros.toString()),
+      );
 
       if (response.statusCode != 200) {
         throw Exception('Erro ao buscar dados iniciais.');
@@ -727,7 +776,7 @@ class ApiService {
         '&t=${DateTime.now().millisecondsSinceEpoch}',
       );
 
-      final response = await http.get(url).timeout(timeout);
+      final response = await _getComRetry(url);
 
       if (response.statusCode != 200) {
         throw Exception(
