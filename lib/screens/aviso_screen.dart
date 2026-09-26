@@ -11,80 +11,52 @@ class AvisoScreen extends StatefulWidget {
   });
 
   @override
-  State<AvisoScreen> createState() =>
-      _AvisoScreenState();
+  State<AvisoScreen> createState() => _AvisoScreenState();
 }
 
-class _AvisoScreenState
-    extends State<AvisoScreen> {
+class _AvisoScreenState extends State<AvisoScreen> {
   bool aceitou = false;
 
   @override
-  Widget build(
-    BuildContext context,
-  ) {
+  Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor:
-          const Color(
-        0xff021426,
-      ),
+      backgroundColor: const Color(0xff021426),
       body: SafeArea(
         child: Padding(
-          padding:
-              const EdgeInsets.all(
-            18,
-          ),
+          padding: const EdgeInsets.all(18),
           child: Column(
             children: [
-              const SizedBox(
-                height: 8,
-              ),
+              const SizedBox(height: 8),
 
               const Text(
                 'AVISO',
                 style: TextStyle(
                   color: Colors.red,
                   fontSize: 36,
-                  fontWeight:
-                      FontWeight.bold,
+                  fontWeight: FontWeight.bold,
                 ),
               ),
 
-              const SizedBox(
-                height: 10,
-              ),
+              const SizedBox(height: 10),
 
               Expanded(
                 flex: 3,
                 child: Container(
-                  width:
-                      double.infinity,
-                  padding:
-                      const EdgeInsets.symmetric(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(
                     horizontal: 22,
                     vertical: 18,
                   ),
-                  decoration:
-                      BoxDecoration(
-                    color:
-                        Colors.white10,
-                    borderRadius:
-                        BorderRadius.circular(
-                      25,
-                    ),
-                    border:
-                        Border.all(
-                      color:
-                          Colors.white54,
-                    ),
+                  decoration: BoxDecoration(
+                    color: Colors.white10,
+                    borderRadius: BorderRadius.circular(25),
+                    border: Border.all(color: Colors.white54),
                   ),
                   child: RichText(
-                    textAlign:
-                        TextAlign.justify,
+                    textAlign: TextAlign.justify,
                     text: const TextSpan(
                       style: TextStyle(
-                        color:
-                            Colors.white,
+                        color: Colors.white,
                         fontSize: 16,
                         height: 1.45,
                       ),
@@ -99,10 +71,8 @@ class _AvisoScreenState
                           text:
                               'Conforme dispõe o art. 2º, § 7º, da Lei Complementar Municipal nº 247/2026, a ausência injustificada ao Plantão RET acarretará a suspensão automática da inscrição no Regime Especial de Trabalho (RET) pelo período de 60 (sessenta) dias.',
                           style: TextStyle(
-                            color:
-                                Colors.redAccent,
-                            fontWeight:
-                                FontWeight.bold,
+                            color: Colors.redAccent,
+                            fontWeight: FontWeight.bold,
                           ),
                         ),
                       ],
@@ -111,13 +81,10 @@ class _AvisoScreenState
                 ),
               ),
 
-              const SizedBox(
-                height: 6,
-              ),
+              const SizedBox(height: 6),
 
               Row(
-                crossAxisAlignment:
-                    CrossAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Checkbox(
                     value: aceitou,
@@ -127,18 +94,13 @@ class _AvisoScreenState
                       });
                     },
                   ),
-
                   const Expanded(
                     child: Padding(
-                      padding:
-                          EdgeInsets.only(
-                        top: 8,
-                      ),
+                      padding: EdgeInsets.only(top: 8),
                       child: Text(
                         'Ao clicar em "Prosseguir", declaro que li, tomei ciência e concordo com estas condições.',
                         style: TextStyle(
-                          color:
-                              Colors.white,
+                          color: Colors.white,
                           fontSize: 15,
                           height: 1.3,
                         ),
@@ -148,13 +110,10 @@ class _AvisoScreenState
                 ],
               ),
 
-              const SizedBox(
-                height: 6,
-              ),
+              const SizedBox(height: 6),
 
               SizedBox(
-                width:
-                    double.infinity,
+                width: double.infinity,
                 height: 58,
                 child: ElevatedButton(
                   onPressed: aceitou
@@ -162,10 +121,14 @@ class _AvisoScreenState
                           Navigator.pushReplacement(
                             context,
                             MaterialPageRoute(
-                              builder: (_) =>
-                                  HomeScreen(
-                                agente:
-                                    widget.agente,
+                              builder: (_) => HomeScreen(
+                                codigo: (widget.agente['codigo'] ?? '')
+                                    .toString(),
+                                nome: (widget.agente['nome'] ?? '')
+                                    .toString(),
+                                matricula:
+                                    (widget.agente['matricula'] ?? '')
+                                        .toString(),
                               ),
                             ),
                           );
@@ -175,16 +138,13 @@ class _AvisoScreenState
                     'PROSSEGUIR',
                     style: TextStyle(
                       fontSize: 20,
-                      fontWeight:
-                          FontWeight.bold,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
                 ),
               ),
 
-              const SizedBox(
-                height: 6,
-              ),
+              const SizedBox(height: 6),
             ],
           ),
         ),

@@ -1,8 +1,8 @@
-
 import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../services/api_service.dart';
+import '../screens/login_screen.dart';
 
 class InscricoesScreen extends StatefulWidget {
   const InscricoesScreen({
@@ -16,6 +16,8 @@ class InscricoesScreen extends StatefulWidget {
 
 class _InscricoesScreenState extends State<InscricoesScreen> {
   bool carregando = true;
+
+  bool _carregandoAgora = false;
 
   Timer? timerAtualizacao;
 
@@ -35,9 +37,7 @@ class _InscricoesScreenState extends State<InscricoesScreen> {
 
     timerAtualizacao = Timer.periodic(
       const Duration(minutes: 1),
-      (_) async {
-        await carregar();
-      },
+      (_) => carregar(silencioso: true),
     );
   }
 
@@ -49,12 +49,18 @@ class _InscricoesScreenState extends State<InscricoesScreen> {
     super.dispose();
   }
 
-  Future<void> carregar() async {
+  Future<void> carregar({bool silencioso = false}) async {
     if (!mounted) return;
 
-    setState(() {
-      carregando = true;
-    });
+    if (_carregandoAgora) return;
+
+    _carregandoAgora = true;
+
+    if (!silencioso) {
+      setState(() {
+        carregando = true;
+      });
+    }
 
     try {
       final lista = await ApiService.buscarInscricoesPDF();
@@ -79,13 +85,34 @@ class _InscricoesScreenState extends State<InscricoesScreen> {
         carregando = false;
       });
 
+      final mensagem = e
+          .toString()
+          .replaceFirst('Exception: ', '');
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           backgroundColor: Colors.red,
-          content: Text(e.toString()),
+          content: Text(mensagem),
         ),
       );
+
+      if (!ApiService.possuiSessao) {
+        _voltarParaLogin();
+      }
+    } finally {
+      _carregandoAgora = false;
     }
+  }
+
+  void _voltarParaLogin() {
+    if (!mounted) return;
+
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(
+        builder: (_) => const LoginScreen(),
+      ),
+      (route) => false,
+    );
   }
 
   void filtrar() {
@@ -95,10 +122,14 @@ class _InscricoesScreenState extends State<InscricoesScreen> {
 
     setState(() {
       filtrados = dados.where((e) {
-        final nome = e['nome'].toString().toLowerCase();
-        final matricula = e['matricula'].toString();
-        final data = e['data'].toString().toLowerCase();
-        final turno = e['turno']?.toString().toLowerCase() ?? '';
+        final nome =
+            (e['nome'] ?? '').toString().toLowerCase();
+        final matricula =
+            (e['matricula'] ?? '').toString().toLowerCase();
+        final data =
+            (e['data'] ?? '').toString().toLowerCase();
+        final turno =
+            (e['turno'] ?? '').toString().toLowerCase();
 
         return nome.contains(texto) ||
             matricula.contains(texto) ||
@@ -125,19 +156,19 @@ class _InscricoesScreenState extends State<InscricoesScreen> {
     final desktop = MediaQuery.of(context).size.width > 900;
 
     final agentes = filtrados
-        .map((e) => e['matricula'].toString())
+        .map((e) => (e['matricula'] ?? '').toString())
         .toSet()
         .length;
 
     final dias = filtrados
-        .map((e) => e['data'].toString())
+        .map((e) => (e['data'] ?? '').toString())
         .toSet()
         .length;
 
     final Map<String, List<dynamic>> agrupados = {};
 
     for (final item in filtrados) {
-      final data = item['data'].toString();
+      final data = (item['data'] ?? '').toString();
 
       agrupados.putIfAbsent(data, () => []);
       agrupados[data]!.add(item);
@@ -201,13 +232,18 @@ class _InscricoesScreenState extends State<InscricoesScreen> {
                           decoration: InputDecoration(
                             hintText:
                                 'Pesquisar nome, matrícula, data ou turno',
-                            prefixIcon: const Icon(Icons.search),
-                            suffixIcon: pesquisaController.text.isEmpty
-                                ? null
-                                : IconButton(
-                                    icon: const Icon(Icons.clear),
-                                    onPressed: pesquisaController.clear,
-                                  ),
+                            prefixIcon:
+                                const Icon(Icons.search),
+                            suffixIcon:
+                                pesquisaController.text.isEmpty
+                                    ? null
+                                    : IconButton(
+                                        icon: const Icon(
+                                          Icons.clear,
+                                        ),
+                                        onPressed:
+                                            pesquisaController.clear,
+                                      ),
                           ),
                         ),
                       ],
@@ -228,12 +264,15 @@ class _InscricoesScreenState extends State<InscricoesScreen> {
                             padding: EdgeInsets.symmetric(
                               horizontal: desktop ? 80 : 20,
                             ),
-                            children: agrupados.entries.map((grupo) {
+                            children:
+                                agrupados.entries.map((grupo) {
                               final lista = grupo.value;
 
                               return Card(
                                 color: Colors.white10,
-                                margin: const EdgeInsets.only(bottom: 15),
+                                margin: const EdgeInsets.only(
+                                  bottom: 15,
+                                ),
                                 child: ExpansionTile(
                                   leading: const Icon(
                                     Icons.calendar_month,
@@ -242,31 +281,37 @@ class _InscricoesScreenState extends State<InscricoesScreen> {
                                   title: Text(
                                     grupo.key,
                                     style: const TextStyle(
-                                      fontWeight: FontWeight.bold,
+                                      fontWeight:
+                                          FontWeight.bold,
                                     ),
                                   ),
                                   subtitle: Text(
                                     '${lista.length} inscrição(ões)',
                                   ),
                                   children: lista.map((e) {
-                                    final nome =
-                                        (e['nome'] ?? '').toString().trim();
+                                    final nome = (e['nome'] ?? '')
+                                        .toString()
+                                        .trim();
 
                                     final inicial = nome.isEmpty
                                         ? '?'
-                                        : nome.substring(0, 1).toUpperCase();
+                                        : nome
+                                            .substring(0, 1)
+                                            .toUpperCase();
 
                                     return ListTile(
                                       isThreeLine: true,
                                       leading: CircleAvatar(
-                                        backgroundColor: Colors.blue,
+                                        backgroundColor:
+                                            Colors.blue,
                                         child: Text(inicial),
                                       ),
                                       title: Text(
-                                        e['nome'].toString(),
+                                        (e['nome'] ?? '')
+                                            .toString(),
                                       ),
                                       subtitle: Text(
-                                        'Matrícula: ${e['matricula']}'
+                                        'Matrícula: ${e['matricula'] ?? ''}'
                                         '\nTurno: ${e['turno'] ?? 'DIA'}',
                                       ),
                                     );

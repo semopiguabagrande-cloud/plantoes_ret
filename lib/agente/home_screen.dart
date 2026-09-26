@@ -1,310 +1,258 @@
-
 import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import '../services/api_service.dart';
 import '../screens/login_screen.dart';
+import '../services/api_service.dart';
 
 class HomeScreen extends StatefulWidget {
-  final Map<String, dynamic> agente;
+  final String codigo;
+  final String nome;
+  final String matricula;
+  final bool ferias;
 
   const HomeScreen({
     super.key,
-    required this.agente,
+    required this.codigo,
+    required this.nome,
+    required this.matricula,
+    this.ferias = false,
   });
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen>
+    with WidgetsBindingObserver {
+  // ===================================================
+  // MÊS ABERTO (vem do servidor / planilha CONFIG)
+  // ===================================================
+
+  String mesAberto = '';
+
   List<dynamic> vagas = [];
 
-  List<Map<String, dynamic>> selecionados = [];
+  final List<Map<String, dynamic>> meusDias = [];
 
-  List<Map<String, dynamic>> inscricoesOriginais = [];
+  List<Map<String, dynamic>> confirmadas = [];
 
-  bool carregando = true;
+  bool _carregandoInicial = true;
 
-  bool sincronizando = false;
+  bool enviando = false;
 
-  bool salvando = false;
+  Timer? _heartbeat;
 
-  bool enviandoHeartbeat = false;
+  int get limitePlantao => widget.ferias ? 10 : 8;
 
-  bool saindo = false;
+  List<Map<String, dynamic>> get confirmadasVisiveis {
+    final lista = List<Map<String, dynamic>>.from(confirmadas);
 
-  late int limitePlantao;
+    lista.sort(
+      (a, b) => _compararData(
+        a['data']?.toString() ?? '',
+        b['data']?.toString() ?? '',
+      ),
+    );
 
-  late String anoAtual;
-  late String mesAtual;
+    return lista;
+  }
 
-  Timer? _timerAtualizacao;
-  bool _atualizandoVagas = false;
+  int get totalEscolhido =>
+      confirmadasVisiveis.length + meusDias.length;
 
-  bool get desktop =>
-      MediaQuery.of(context).size.width > 800;
+  bool get limiteAtingido => totalEscolhido >= limitePlantao;
 
   // ===================================================
-  // INICIALIZAÇÃO
+  // INIT
   // ===================================================
 
   @override
   void initState() {
     super.initState();
 
-    anoAtual = '2026';
-    mesAtual = '07';
+    WidgetsBinding.instance.addObserver(this);
 
-    limitePlantao =
-        widget.agente['ferias'] == true ? 10 : 8;
-
-    iniciar();
-
-    _timerAtualizacao = Timer.periodic(
-      const Duration(seconds: 5),
-      (_) async {
-        if (!mounted || saindo) return;
-
-        if (salvando || _atualizandoVagas) {
-          return;
-        }
-
-        _atualizandoVagas = true;
-
-        try {
-          await carregarVagas(
-            mostrarLoading: false,
-          );
-        } finally {
-          _atualizandoVagas = false;
-        }
-      },
-    );
+    carregarTudo();
+    _iniciarHeartbeat();
   }
-
-  // ===================================================
-  // DISPOSE
-  // ===================================================
 
   @override
   void dispose() {
-    _timerAtualizacao?.cancel();
-    _timerAtualizacao = null;
-
+    _heartbeat?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
     super.dispose();
-  }
-
-  // ===================================================
-  // INICIAR
-  // ===================================================
-
-  Future<void> iniciar() async {
-    await carregarInicial();
   }
 
   // ===================================================
   // HEARTBEAT
   // ===================================================
 
-  Future<void> manterSessaoAtiva() async {
-    if (enviandoHeartbeat || saindo) {
-      return;
-    }
+  void _iniciarHeartbeat() {
+    _heartbeat?.cancel();
 
-    if (!ApiService.possuiSessao) {
-      debugPrint(
-        'Heartbeat ignorado: não existe sessão.',
-      );
+    _heartbeat = Timer.periodic(
+      const Duration(seconds: 60),
+      (_) async {
+        if (!ApiService.possuiSessao) {
+          await _reloginSilencioso();
+          return;
+        }
 
-      return;
-    }
+        final ok = await ApiService.heartbeat();
 
-    enviandoHeartbeat = true;
+        if (!ok) {
+          await _reloginSilencioso();
+        }
+      },
+    );
+  }
 
-    try {
-      final sessaoAtiva =
-          await ApiService.heartbeat();
-
-      debugPrint(
-        'Heartbeat: $sessaoAtiva',
-      );
-
-      if (!sessaoAtiva && mounted && !saindo) {
-        await sessaoEncerrada();
-      }
-    } catch (e) {
-      debugPrint(
-        'Erro no heartbeat: $e',
-      );
-    } finally {
-      enviandoHeartbeat = false;
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      ApiService.heartbeat();
+      _iniciarHeartbeat();
+    } else if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive) {
+      _heartbeat?.cancel();
     }
   }
 
   // ===================================================
-  // SESSÃO ENCERRADA PELO SERVIDOR
+  // REAUTENTICAÇÃO SILENCIOSA
   // ===================================================
 
-  Future<void> sessaoEncerrada() async {
-    if (!mounted || saindo) return;
+  Future<bool> _reloginSilencioso() async {
+    try {
+      var r = await ApiService.buscarAgente(widget.codigo);
 
-    saindo = true;
+      if (r['success'] == true) return true;
 
-    _timerAtualizacao?.cancel();
-    _timerAtualizacao = null;
+      if (r['codigoConflito'] == true) {
+        r = await ApiService.buscarAgente(
+          widget.codigo,
+          forcar: true,
+        );
 
-    ApiService.limparSessao();
+        return r['success'] == true;
+      }
 
+      return false;
+    } catch (e) {
+      debugPrint('Relogin silencioso falhou: $e');
+      return false;
+    }
+  }
+
+  // ===================================================
+  // MENSAGENS
+  // ===================================================
+
+  void _mostrarErro(Object erro) {
     if (!mounted) return;
 
-    await showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text(
-            'Sessão encerrada',
-          ),
-          content: const Text(
-            'Sua sessão foi encerrada. '
-            'Será necessário fazer login novamente.',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-              child: const Text(
-                'OK',
+    var msg = erro.toString();
+    msg = msg.replaceFirst('Exception: ', '');
+    msg = msg.replaceFirst('Erro ao buscar vagas.\n', '');
+    msg = msg.replaceFirst('Erro ao buscar inscrições.\n', '');
+    msg = msg.replaceFirst('Erro ao salvar inscrição.\n', '');
+    msg = msg.replaceFirst('Erro ao cancelar inscrição.\n', '');
+    msg = msg.replaceFirst('Erro ao buscar dados iniciais.\n', '');
+    msg = msg.replaceFirst('Erro ao buscar agente.\n', '');
+    msg = msg.replaceFirst(
+      'Tempo de conexão esgotado.',
+      'Tempo esgotado. Tente novamente.',
+    );
+
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.hideCurrentSnackBar();
+
+    messenger.showSnackBar(
+      SnackBar(
+        backgroundColor: Colors.red.shade700,
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 5),
+        content: Row(
+          children: [
+            const Icon(
+              Icons.warning_amber_rounded,
+              color: Colors.white,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                msg,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ),
           ],
-        );
-      },
+        ),
+      ),
     );
+  }
 
+  void _mostrarSucesso(String texto) {
     if (!mounted) return;
 
-    Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(
-        builder: (_) => const LoginScreen(),
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.hideCurrentSnackBar();
+
+    messenger.showSnackBar(
+      SnackBar(
+        backgroundColor: Colors.green.shade700,
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 3),
+        content: Text(
+          texto,
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
       ),
-      (route) => false,
     );
   }
 
   // ===================================================
-  // LOGOUT VOLUNTÁRIO
+  // LOGOUT
   // ===================================================
 
-  Future<void> fazerLogout() async {
-    if (salvando || saindo) {
-      if (salvando && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            backgroundColor: Colors.orange,
-            content: Text(
-              'Aguarde o salvamento terminar.',
-            ),
-          ),
-        );
-      }
-
-      return;
-    }
-
+  Future<void> _sair() async {
     final confirmar = await showDialog<bool>(
       context: context,
-      builder: (context) {
+      builder: (dialogContext) {
         return AlertDialog(
-          title: const Text(
-            'Sair do aplicativo?',
-          ),
+          title: const Text('Sair'),
           content: const Text(
-            'Ao sair, sua sessão será liberada '
-            'e você poderá fazer login em outro dispositivo.',
+            'Deseja realmente encerrar a sessão?',
           ),
           actions: [
             TextButton(
-              onPressed: () {
-                Navigator.of(context).pop(false);
-              },
-              child: const Text(
-                'CANCELAR',
-              ),
+              onPressed: () =>
+                  Navigator.of(dialogContext).pop(false),
+              child: const Text('Cancelar'),
             ),
-            ElevatedButton(
-              onPressed: () {
-                Navigator.of(context).pop(true);
-              },
-              child: const Text(
-                'SAIR',
-              ),
+            FilledButton(
+              onPressed: () =>
+                  Navigator.of(dialogContext).pop(true),
+              child: const Text('Sair'),
             ),
           ],
         );
       },
     );
 
-    if (confirmar != true) {
-      return;
-    }
+    if (confirmar != true) return;
+
+    _heartbeat?.cancel();
+
+    await ApiService.logout();
 
     if (!mounted) return;
-
-    setState(() {
-      saindo = true;
-    });
-
-    _timerAtualizacao?.cancel();
-    _timerAtualizacao = null;
-
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) {
-        return const PopScope(
-          canPop: false,
-          child: AlertDialog(
-            content: Row(
-              children: [
-                SizedBox(
-                  width: 25,
-                  height: 25,
-                  child: CircularProgressIndicator(),
-                ),
-                SizedBox(width: 20),
-                Expanded(
-                  child: Text(
-                    'Encerrando sessão...',
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-
-    try {
-      final resultado = await ApiService.logout();
-
-      debugPrint(
-        'Logout: $resultado',
-      );
-    } catch (e) {
-      debugPrint(
-        'Erro no logout: $e',
-      );
-    }
-
-    ApiService.limparSessao();
-
-    if (!mounted) return;
-
-    Navigator.of(context).pop();
 
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(
@@ -315,218 +263,213 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   // ===================================================
-  // CARREGAR MINHAS INSCRIÇÕES
+  // CARREGAR
   // ===================================================
 
-  Future<void> carregarMinhasInscricoes() async {
-    try {
-      final dados =
-          await ApiService.buscarMinhasInscricoes(
-        widget.agente['codigo'].toString(),
-      );
-
-      if (!mounted || saindo) return;
-
-      setState(() {
-        selecionados =
-            List<Map<String, dynamic>>.from(
-          dados,
-        );
-
-        inscricoesOriginais =
-            List<Map<String, dynamic>>.from(
-          dados,
-        );
-      });
-    } catch (e) {
-      debugPrint(
-        e.toString(),
-      );
+  Future<void> carregarTudo({bool silencioso = false}) async {
+    if (!silencioso && mounted) {
+      setState(() => _carregandoInicial = true);
     }
-  }
-
-  // ===================================================
-  // CARREGAR DADOS INICIAIS
-  // ===================================================
-
-  Future<void> carregarInicial({
-    bool mostrarLoading = true,
-  }) async {
-    if (saindo) return;
 
     try {
-      if (mounted) {
-        setState(() {
-          if (mostrarLoading) {
-            carregando = true;
-          } else {
-            sincronizando = true;
-          }
-        });
+      var resultado =
+          await ApiService.buscarInicial(codigo: widget.codigo);
+
+      if (resultado['success'] != true &&
+          resultado['sessaoExpirada'] == true) {
+        final reok = await _reloginSilencioso();
+
+        if (reok) {
+          resultado =
+              await ApiService.buscarInicial(codigo: widget.codigo);
+        }
       }
 
-      final dados =
-          await ApiService.buscarInicial(
-        codigo: widget.agente['codigo'].toString(),
-      );
+      if (!mounted) return;
 
-      if (!mounted || saindo) return;
+      if (resultado['success'] == true) {
+        final vagasLista = resultado['vagas'];
+        final minhasLista = resultado['minhas'];
 
-      if (dados['sessaoExpirada'] == true) {
-        await sessaoEncerrada();
+        setState(() {
+          mesAberto = (resultado['mesAberto'] ?? '').toString();
+
+          vagas = vagasLista is List
+              ? List<dynamic>.from(vagasLista)
+              : [];
+
+          confirmadas = (minhasLista is List)
+              ? minhasLista.map((e) {
+                  return <String, dynamic>{
+                    'data': (e['data'] ?? '').toString(),
+                    'turno':
+                        (e['turno'] ?? 'UNICO').toString().toUpperCase(),
+                  };
+                }).toList()
+              : [];
+
+          _carregandoInicial = false;
+        });
+
+        debugPrint('=== HOME ===');
+        debugPrint('Mês aberto: $mesAberto');
+        debugPrint('Vagas: ${vagas.length}');
+        debugPrint('Confirmadas: ${confirmadas.length}');
+        debugPrint('============');
+
         return;
       }
 
-      if (dados['success'] != true) {
-        throw Exception(
-          dados['mensagem'] ??
-              'Não foi possível carregar os dados.',
-        );
-      }
-
-      final listaVagas =
-          dados['vagas'] is List
-              ? dados['vagas']
-              : [];
-
-      final listaMinhas =
-          dados['minhas'] is List
-              ? dados['minhas']
-              : [];
-
-      if (!mounted || saindo) return;
-
-      setState(() {
-        vagas = List<dynamic>.from(listaVagas);
-
-        selecionados =
-            List<Map<String, dynamic>>.from(
-          listaMinhas.map(
-            (e) => Map<String, dynamic>.from(e),
-          ),
-        );
-
-        inscricoesOriginais =
-            List<Map<String, dynamic>>.from(
-          selecionados,
-        );
-
-        carregando = false;
-        sincronizando = false;
-      });
-    } catch (e) {
-      if (!mounted || saindo) return;
-
-      setState(() {
-        carregando = false;
-        sincronizando = false;
-      });
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          backgroundColor: Colors.red,
-          content: Text(
-            e.toString(),
-          ),
-        ),
+      setState(() => _carregandoInicial = false);
+      _mostrarErro(
+        resultado['mensagem']?.toString() ??
+            'Não foi possível carregar os dados.',
       );
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() => _carregandoInicial = false);
+      _mostrarErro(e);
     }
   }
 
   // ===================================================
-  // CARREGAR VAGAS
+  // HELPERS
   // ===================================================
 
-  Future<void> carregarVagas({
-    bool mostrarLoading = true,
-  }) async {
-    if (saindo) return;
+  String _formatarMesAberto(String chave) {
+    if (chave.length < 7) return chave;
 
-    try {
-      if (mounted) {
-        setState(() {
-          if (mostrarLoading) {
-            carregando = true;
-          } else {
-            sincronizando = true;
-          }
-        });
-      }
+    final partes = chave.split('-');
+    if (partes.length != 2) return chave;
 
-      final dados = await ApiService.buscarVagas(
-        ano: anoAtual,
-        mes: mesAtual,
-      );
+    final ano = partes[0];
+    final mesNum = int.tryParse(partes[1]);
 
-      if (!mounted || saindo) return;
+    if (mesNum == null || mesNum < 1 || mesNum > 12) return chave;
 
-      setState(() {
-        vagas = List<dynamic>.from(dados);
+    const nomes = [
+      'JANEIRO',
+      'FEVEREIRO',
+      'MARÇO',
+      'ABRIL',
+      'MAIO',
+      'JUNHO',
+      'JULHO',
+      'AGOSTO',
+      'SETEMBRO',
+      'OUTUBRO',
+      'NOVEMBRO',
+      'DEZEMBRO',
+    ];
 
-        carregando = false;
-        sincronizando = false;
-      });
-    } catch (e) {
-      if (!mounted || saindo) return;
-
-      setState(() {
-        carregando = false;
-        sincronizando = false;
-      });
-
-      debugPrint(
-        'Erro ao atualizar vagas: $e',
-      );
-    }
+    return '${nomes[mesNum - 1]}/$ano';
   }
 
-  // ===================================================
-  // SELECIONAR
-  // ===================================================
+  String normalizarData(dynamic valor) {
+    final texto = valor.toString().trim();
 
-  void selecionar(
-    String data,
-    String turno,
-  ) {
-    if (saindo) return;
+    if (texto.contains('T')) {
+      final data = DateTime.parse(texto);
 
-    final existe = selecionados.any(
-      (e) =>
-          e['data'] == data &&
-          e['turno'] == turno,
+      return '${data.day.toString().padLeft(2, '0')}/'
+          '${data.month.toString().padLeft(2, '0')}/'
+          '${data.year}';
+    }
+
+    return texto;
+  }
+
+  DateTime? _paraData(String texto) {
+    final partes = texto.split('/');
+
+    if (partes.length != 3) return null;
+
+    final dia = int.tryParse(partes[0]);
+    final mesNum = int.tryParse(partes[1]);
+    final anoNum = int.tryParse(partes[2]);
+
+    if (dia == null || mesNum == null || anoNum == null) {
+      return null;
+    }
+
+    return DateTime(anoNum, mesNum, dia);
+  }
+
+  int _compararData(String a, String b) {
+    final da = _paraData(a);
+    final db = _paraData(b);
+
+    if (da == null || db == null) return 0;
+
+    return da.compareTo(db);
+  }
+
+  String _rotuloTurno(String turno) {
+    final t = turno.toUpperCase();
+    if (t == 'UNICO') return 'Plantão';
+    return t;
+  }
+
+  Map<String, dynamic>? _confirmadaDoDia(String data) {
+    for (final e in confirmadas) {
+      if (e['data'] == data) return e;
+    }
+    return null;
+  }
+
+  bool estaSelecionado(String data, String turno) {
+    return meusDias.any(
+      (item) =>
+          item['data'] == data && item['turno'] == turno,
     );
+  }
 
-    if (existe) {
-      setState(() {
-        selecionados.removeWhere(
-          (e) =>
-              e['data'] == data &&
-              e['turno'] == turno,
-        );
-      });
+  // ===================================================
+  // SELEÇÃO
+  // ===================================================
 
+  void selecionarPlantao(String data, String turno) {
+    if (enviando) return;
+
+    final confirmada = _confirmadaDoDia(data);
+
+    if (confirmada != null) {
+      _mostrarErro(
+        'Você já tem plantão confirmado em $data. '
+        'Desmarque o confirmado (X no chip verde) para trocar.',
+      );
       return;
     }
 
-    if (selecionados.length >= limitePlantao) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          backgroundColor: Colors.red,
-          content: Text(
-            'Limite de plantões atingido.',
-          ),
-        ),
-      );
+    if (estaSelecionado(data, turno)) {
+      setState(() {
+        meusDias.removeWhere(
+          (item) =>
+              item['data'] == data && item['turno'] == turno,
+        );
+      });
+      return;
+    }
 
+    final jaTemNoDia =
+        meusDias.any((item) => item['data'] == data);
+
+    if (!jaTemNoDia && totalEscolhido >= limitePlantao) {
+      _mostrarErro(
+        'Você já atingiu o limite de $limitePlantao '
+        'plantões neste mês.\n\n'
+        'Para escolher outro dia, cancele um já '
+        'confirmado (X no chip verde) ou desmarque '
+        'um da lista "A confirmar".',
+      );
       return;
     }
 
     setState(() {
-      selecionados.removeWhere(
-        (e) => e['data'] == data,
-      );
+      meusDias.removeWhere((item) => item['data'] == data);
 
-      selecionados.add({
+      meusDias.add({
         'data': data,
         'turno': turno,
       });
@@ -534,214 +477,564 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   // ===================================================
-  // SALVAR ESCOLHAS
+  // SALVAR
   // ===================================================
 
-  Future<void> salvarEscolhas() async {
-    if (salvando || saindo) return;
+  Future<void> confirmarPlantao() async {
+    if (meusDias.isEmpty) {
+      _mostrarErro('Selecione ao menos um plantão.');
+      return;
+    }
 
-    setState(() {
-      salvando = true;
-    });
+    setState(() => enviando = true);
+
+    final preferencias = meusDias.map((item) {
+      return <String, dynamic>{
+        'data': item['data'],
+        'turno': item['turno'],
+      };
+    }).toList();
 
     try {
-      final cronometro = Stopwatch()..start();
-
-      await carregarVagas(
-        mostrarLoading: false,
+      var resposta = await ApiService.salvarInscricao(
+        ano: DateTime.now().year.toString(),
+        mes: DateTime.now().month.toString().padLeft(2, '0'),
+        codigo: widget.codigo,
+        matricula: widget.matricula,
+        nome: widget.nome,
+        datas: preferencias,
       );
 
-      if (!mounted || saindo) return;
+      if (resposta['success'] != true &&
+          resposta['sessaoExpirada'] == true) {
+        final reok = await _reloginSilencioso();
 
-      final adicionar = selecionados.where(
-        (item) {
-          return !inscricoesOriginais.any(
-            (x) =>
-                x['data'] == item['data'] &&
-                x['turno'] == item['turno'],
+        if (reok) {
+          resposta = await ApiService.salvarInscricao(
+            ano: DateTime.now().year.toString(),
+            mes: DateTime.now().month.toString().padLeft(2, '0'),
+            codigo: widget.codigo,
+            matricula: widget.matricula,
+            nome: widget.nome,
+            datas: preferencias,
           );
-        },
-      ).toList();
-
-      final remover = inscricoesOriginais.where(
-        (item) {
-          return !selecionados.any(
-            (x) =>
-                x['data'] == item['data'] &&
-                x['turno'] == item['turno'],
-          );
-        },
-      ).toList();
-
-      // =================================================
-      // VALIDA VAGAS
-      // =================================================
-
-      for (final item in adicionar) {
-        final vaga = vagas.firstWhere(
-          (e) =>
-              e['data'].toString() ==
-              item['data'].toString(),
-        );
-
-        final turno = item['turno'].toString();
-
-        if (turno == 'DIA') {
-          final restantes =
-              int.tryParse(
-                    vaga['restantesDia'].toString(),
-                  ) ??
-                  0;
-
-          if (restantes <= 0) {
-            throw Exception(
-              'A vaga do dia '
-              '${item['data']} '
-              'foi preenchida por outro agente.',
-            );
-          }
-        }
-
-        if (turno == 'NOITE') {
-          final restantes =
-              int.tryParse(
-                    vaga['restantesNoite'].toString(),
-                  ) ??
-                  0;
-
-          if (restantes <= 0) {
-            throw Exception(
-              'A vaga da noite '
-              '${item['data']} '
-              'foi preenchida por outro agente.',
-            );
-          }
         }
       }
 
-      // =================================================
-      // CANCELAR
-      // =================================================
+      if (!mounted) return;
 
-      if (remover.isNotEmpty) {
-        await ApiService.cancelarInscricao(
-          codigo: widget.agente['codigo'].toString(),
-          datas: remover,
+      final sucesso = resposta['success'] == true ||
+          resposta['sucesso'] == true;
+
+      if (!sucesso) {
+        _mostrarErro(
+          resposta['mensagem']?.toString() ??
+              'Não foi possível salvar a inscrição.',
         );
+        return;
       }
 
-      debugPrint(
-        'Cancelar: '
-        '${cronometro.elapsedMilliseconds} ms',
+      _mostrarSucesso(
+        resposta['mensagem']?.toString() ??
+            'Inscrição salva com sucesso.',
       );
 
-      // =================================================
-      // ADICIONAR
-      // =================================================
+      setState(() => meusDias.clear());
 
-      if (adicionar.isNotEmpty) {
-        final resposta =
-            await ApiService.salvarInscricao(
-          ano: anoAtual,
-          mes: mesAtual,
-          codigo: widget.agente['codigo'].toString(),
-          matricula: widget.agente['matricula'].toString(),
-          nome: widget.agente['nome'].toString(),
-          datas: adicionar,
+      await carregarTudo(silencioso: true);
+    } catch (e) {
+      if (!mounted) return;
+      _mostrarErro(e);
+    } finally {
+      if (mounted) setState(() => enviando = false);
+    }
+  }
+
+  // ===================================================
+  // CANCELAR
+  // ===================================================
+
+  Future<void> _cancelarPlantao(
+    String data,
+    String turno,
+  ) async {
+    if (enviando) return;
+
+    final confirmar = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Cancelar plantão'),
+          content: Text(
+            'Deseja cancelar o plantão de $data '
+            '(${_rotuloTurno(turno)})?\n\n'
+            'A vaga voltará a ficar disponível.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () =>
+                  Navigator.of(dialogContext).pop(false),
+              child: const Text('NÃO'),
+            ),
+            FilledButton(
+              onPressed: () =>
+                  Navigator.of(dialogContext).pop(true),
+              child: const Text('CANCELAR PLANTÃO'),
+            ),
+          ],
         );
+      },
+    );
 
-        debugPrint(
-          'Salvar API: '
-          '${cronometro.elapsedMilliseconds} ms',
-        );
+    if (confirmar != true) return;
 
-        if (resposta['success'] != true) {
-          final dataErro = resposta['data']?.toString();
+    setState(() => enviando = true);
 
-          final turnoErro = resposta['turno']?.toString();
-
-          if (dataErro != null && turnoErro != null) {
-            if (mounted) {
-              setState(() {
-                selecionados.removeWhere(
-                  (e) =>
-                      e['data'].toString() == dataErro &&
-                      e['turno']
-                              .toString()
-                              .toUpperCase() ==
-                          turnoErro.toUpperCase(),
-                );
-              });
-            }
+    try {
+      var resposta = await ApiService.cancelarInscricao(
+        codigo: widget.codigo,
+        datas: [
+          {
+            'data': data,
+            'turno': turno,
           }
+        ],
+      );
 
-          await carregarInicial(
-            mostrarLoading: false,
+      if (resposta['success'] != true &&
+          resposta['sessaoExpirada'] == true) {
+        final reok = await _reloginSilencioso();
+
+        if (reok) {
+          resposta = await ApiService.cancelarInscricao(
+            codigo: widget.codigo,
+            datas: [
+              {
+                'data': data,
+                'turno': turno,
+              }
+            ],
           );
+        }
+      }
 
-          if (!mounted || saindo) return;
+      if (!mounted) return;
 
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              backgroundColor: Colors.red,
-              content: Text(
-                resposta['mensagem']?.toString() ??
-                    'Erro ao salvar.',
+      final sucesso = resposta['success'] == true ||
+          resposta['sucesso'] == true;
+
+      if (!sucesso) {
+        _mostrarErro(
+          resposta['mensagem']?.toString() ??
+              'Não foi possível cancelar o plantão.',
+        );
+        return;
+      }
+
+      _mostrarSucesso(
+        'Plantão de $data cancelado. Vaga liberada.',
+      );
+
+      await carregarTudo(silencioso: true);
+    } catch (e) {
+      if (!mounted) return;
+      _mostrarErro(e);
+    } finally {
+      if (mounted) setState(() => enviando = false);
+    }
+  }
+
+  // ===================================================
+  // COMPONENTES
+  // ===================================================
+
+  Widget _badge(String texto, Color cor) {
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: 10,
+        vertical: 4,
+      ),
+      decoration: BoxDecoration(
+        color: cor.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: cor),
+      ),
+      child: Text(
+        texto,
+        style: TextStyle(
+          color: cor,
+          fontWeight: FontWeight.bold,
+          fontSize: 12,
+        ),
+      ),
+    );
+  }
+
+  // ===================================================
+  // BANNER DO MÊS ABERTO
+  // ===================================================
+
+  Widget _bannerMesAberto() {
+    final definido = mesAberto.isNotEmpty;
+
+    return Card(
+      color: definido
+          ? Colors.blue.withValues(alpha: 0.12)
+          : Colors.orange.withValues(alpha: 0.12),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(
+          color: definido
+              ? Colors.lightBlueAccent
+              : Colors.orangeAccent,
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Row(
+          children: [
+            Icon(
+              definido ? Icons.event_available : Icons.event_busy,
+              color: definido
+                  ? Colors.lightBlueAccent
+                  : Colors.orangeAccent,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'MÊS ABERTO',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.white70,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  Text(
+                    definido
+                        ? _formatarMesAberto(mesAberto)
+                        : 'Não definido',
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
               ),
             ),
-          );
-
-          setState(() {
-            salvando = false;
-          });
-
-          return;
-        }
-      }
-
-      // =================================================
-      // ATUALIZA
-      // =================================================
-
-      await carregarInicial(
-        mostrarLoading: false,
-      );
-
-      if (!mounted || saindo) return;
-
-      setState(() {
-        salvando = false;
-      });
-
-      debugPrint(
-        'TOTAL (sucesso): '
-        '${cronometro.elapsedMilliseconds} ms',
-      );
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          backgroundColor: Colors.green,
-          content: Text(
-            'Alterações salvas.',
-          ),
+          ],
         ),
-      );
-    } catch (e) {
-      if (!mounted || saindo) return;
+      ),
+    );
+  }
 
-      setState(() {
-        salvando = false;
-      });
+  Widget _cardContador() {
+    final atingiu = limiteAtingido;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          backgroundColor: Colors.red,
-          content: Text(
-            e.toString(),
-          ),
+    return Card(
+      color: atingiu ? Colors.red.withValues(alpha: 0.15) : null,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(18),
+        side: atingiu
+            ? const BorderSide(color: Colors.redAccent)
+            : BorderSide.none,
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Plantões escolhidos',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                if (atingiu)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 2),
+                    child: Text(
+                      'LIMITE MÁXIMO ATINGIDO',
+                      style: TextStyle(
+                        color: Colors.redAccent,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            Text(
+              '$totalEscolhido/$limitePlantao',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: atingiu
+                    ? Colors.redAccent
+                    : Colors.amberAccent,
+              ),
+            ),
+          ],
         ),
-      );
+      ),
+    );
+  }
+
+  Widget _secaoConfirmados() {
+    final lista = confirmadasVisiveis;
+
+    return Card(
+      color: Colors.green.withValues(alpha: 0.10),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(
+                  Icons.check_circle,
+                  color: Colors.greenAccent,
+                  size: 20,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Plantões confirmados (${lista.length})',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: Colors.greenAccent,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              'Toque no X de um dia para cancelar.',
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.white54,
+              ),
+            ),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: lista.map((e) {
+                final data = e['data'].toString();
+                final turno = e['turno'].toString();
+
+                return Chip(
+                  avatar: const Icon(
+                    Icons.event_available,
+                    size: 18,
+                    color: Colors.greenAccent,
+                  ),
+                  label: Text('$data · ${_rotuloTurno(turno)}'),
+                  backgroundColor: Colors.white10,
+                  deleteIconColor: Colors.redAccent,
+                  onDeleted: enviando
+                      ? null
+                      : () => _cancelarPlantao(data, turno),
+                );
+              }).toList(),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _secaoPendentes() {
+    return Card(
+      color: Colors.amber.withValues(alpha: 0.08),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(
+                  Icons.pending_actions,
+                  color: Colors.amberAccent,
+                  size: 20,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'A confirmar (${meusDias.length})',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: Colors.amberAccent,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: meusDias.map((e) {
+                return Chip(
+                  label: Text(
+                    '${e['data']} · ${_rotuloTurno(e['turno']?.toString() ?? 'DIA')}',
+                  ),
+                  backgroundColor: Colors.white10,
+                  onDeleted: enviando
+                      ? null
+                      : () {
+                          setState(() {
+                            meusDias.removeWhere(
+                              (item) =>
+                                  item['data'] == e['data'] &&
+                                  item['turno'] == e['turno'],
+                            );
+                          });
+                        },
+                );
+              }).toList(),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget construirOpcaoTurno({
+    required String data,
+    required String turno,
+    required int restantes,
+  }) {
+    final selecionado = estaSelecionado(data, turno);
+    final indisponivel = restantes <= 0;
+
+    final jaTemNoDia =
+        meusDias.any((item) => item['data'] == data);
+
+    final bloqueadoPorLimite =
+        !selecionado && !jaTemNoDia && limiteAtingido;
+
+    String subtitulo;
+
+    if (indisponivel) {
+      subtitulo = 'Sem vagas disponíveis';
+    } else if (bloqueadoPorLimite) {
+      subtitulo = 'Limite de $limitePlantao plantões atingido';
+    } else {
+      subtitulo = '$restantes vaga(s) disponível(is)';
     }
+
+    return CheckboxListTile(
+      value: selecionado,
+      dense: true,
+      controlAffinity: ListTileControlAffinity.leading,
+      title: Text(
+        _rotuloTurno(turno),
+        style: bloqueadoPorLimite
+            ? const TextStyle(color: Colors.white38)
+            : null,
+      ),
+      subtitle: Text(
+        subtitulo,
+        style: bloqueadoPorLimite
+            ? const TextStyle(
+                color: Colors.redAccent,
+                fontSize: 12,
+              )
+            : null,
+      ),
+      onChanged: indisponivel || enviando
+          ? null
+          : (_) => selecionarPlantao(data, turno),
+    );
+  }
+
+  Widget construirCartaoVaga(dynamic vaga) {
+    final data = normalizarData(vaga['data']);
+
+    final restantesDia =
+        int.tryParse(vaga['restantesDia']?.toString() ?? '') ?? 0;
+
+    final restantesNoite =
+        int.tryParse(vaga['restantesNoite']?.toString() ?? '') ?? 0;
+
+    final possuiNoite = vaga['possuiNoite'] == true;
+
+    final confirmada = _confirmadaDoDia(data);
+
+    final semVaga = confirmada == null &&
+        (possuiNoite
+            ? (restantesDia <= 0 && restantesNoite <= 0)
+            : (restantesDia <= 0));
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+              child: Row(
+                mainAxisAlignment:
+                    MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    data,
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  if (confirmada != null)
+                    _badge('CONFIRMADO', Colors.greenAccent)
+                  else if (semVaga)
+                    _badge('LOTADO', Colors.redAccent),
+                ],
+              ),
+            ),
+
+            if (confirmada != null)
+              CheckboxListTile(
+                value: true,
+                dense: true,
+                controlAffinity:
+                    ListTileControlAffinity.leading,
+                title: Text(
+                  _rotuloTurno(
+                    confirmada['turno']?.toString() ?? 'DIA',
+                  ),
+                ),
+                subtitle: const Text(
+                  'Confirmado — desmarque para cancelar',
+                ),
+                onChanged: enviando
+                    ? null
+                    : (_) => _cancelarPlantao(
+                          data,
+                          confirmada['turno']?.toString() ?? 'DIA',
+                        ),
+              )
+            else ...[
+              construirOpcaoTurno(
+                data: data,
+                turno: possuiNoite ? 'DIA' : 'UNICO',
+                restantes: restantesDia,
+              ),
+              if (possuiNoite)
+                construirOpcaoTurno(
+                  data: data,
+                  turno: 'NOITE',
+                  restantes: restantesNoite,
+                ),
+            ],
+          ],
+        ),
+      ),
+    );
   }
 
   // ===================================================
@@ -751,296 +1044,132 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xff021426),
       appBar: AppBar(
-        backgroundColor: const Color(0xff00162f),
+        title: const Text('PLANTÕES RET'),
         centerTitle: true,
-        title: const Text(
-          'PLANTÕES RET',
-        ),
         actions: [
-          if (sincronizando)
-            const Padding(
-              padding: EdgeInsets.only(
-                right: 10,
-              ),
-              child: Center(
-                child: SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: Colors.white,
-                  ),
-                ),
-              ),
-            ),
           IconButton(
             tooltip: 'Sair',
-            icon: const Icon(
-              Icons.logout,
-            ),
-            onPressed: (salvando || saindo)
-                ? null
-                : fazerLogout,
+            icon: const Icon(Icons.logout),
+            onPressed: enviando ? null : _sair,
           ),
         ],
+        bottom: enviando
+            ? const PreferredSize(
+                preferredSize: Size.fromHeight(3),
+                child: LinearProgressIndicator(minHeight: 3),
+              )
+            : null,
       ),
-      body: carregando
+      body: _carregandoInicial
           ? const Center(
-              child: CircularProgressIndicator(),
-            )
-          : Padding(
-              padding: EdgeInsets.all(
-                desktop ? 30 : 20,
-              ),
               child: Column(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Card(
-                    color: Colors.white10,
-                    child: Padding(
-                      padding: const EdgeInsets.all(20),
-                      child: Column(
-                        children: [
-                          Text(
-                            widget.agente['nome'] ?? '',
-                            style: TextStyle(
-                              fontSize: desktop ? 30 : 24,
-                              fontWeight: FontWeight.bold,
-                            ),
+                  CircularProgressIndicator(),
+                  SizedBox(height: 16),
+                  Text('Carregando plantões...'),
+                ],
+              ),
+            )
+          : Column(
+              children: [
+                Expanded(
+                  child: RefreshIndicator(
+                    onRefresh: () => carregarTudo(silencioso: true),
+                    child: ListView(
+                      physics:
+                          const AlwaysScrollableScrollPhysics(),
+                      padding: const EdgeInsets.all(15),
+                      children: [
+                        Text(
+                          widget.nome,
+                          style: const TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.bold,
                           ),
-                          const SizedBox(height: 10),
-                          Text(
-                            'Matrícula: '
-                            '${widget.agente['matricula']}',
-                          ),
-                          const SizedBox(height: 10),
-                          Text(
-                            'Plantões '
-                            '${selecionados.length}'
-                            '/$limitePlantao',
-                            style: const TextStyle(
-                              color: Colors.amber,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          const SizedBox(height: 20),
-                          Container(
-                            width: double.infinity,
-                            height: 58,
-                            alignment: Alignment.centerLeft,
-                            child: selecionados.isEmpty
-                                ? const Center(
-                                    child: Text(
-                                      'Nenhum plantão selecionado',
-                                      style: TextStyle(
-                                        color: Colors.white70,
-                                      ),
-                                    ),
-                                  )
-                                : Builder(
-                                    builder: (context) {
-                                      final lista =
-                                          List<Map<String, dynamic>>.from(
-                                        selecionados,
-                                      );
+                        ),
+                        Text(
+                          'Matrícula: ${widget.matricula}',
+                        ),
+                        const SizedBox(height: 16),
 
-                                      lista.sort(
-                                        (a, b) {
-                                          final da = DateTime.parse(
-                                            a['data']
-                                                .toString()
-                                                .split('/')
-                                                .reversed
-                                                .join('-'),
-                                          );
+                        _bannerMesAberto(),
 
-                                          final db = DateTime.parse(
-                                            b['data']
-                                                .toString()
-                                                .split('/')
-                                                .reversed
-                                                .join('-'),
-                                          );
+                        const SizedBox(height: 12),
 
-                                          return da.compareTo(db);
-                                        },
-                                      );
+                        _cardContador(),
 
-                                      return ListView.separated(
-                                        scrollDirection: Axis.horizontal,
-                                        physics:
-                                            const BouncingScrollPhysics(),
-                                        itemCount: lista.length,
-                                        separatorBuilder: (_, _) =>
-                                            const SizedBox(width: 8),
-                                        itemBuilder: (context, index) {
-                                          final e = lista[index];
-
-                                          return Center(
-                                            child: Chip(
-                                              backgroundColor:
-                                                  Colors.white10,
-                                              label: Text(
-                                                '${e['data']} '
-                                                '(${e['turno']})',
-                                                overflow:
-                                                    TextOverflow.ellipsis,
-                                                style: const TextStyle(
-                                                  color: Colors.white,
-                                                ),
-                                              ),
-                                            ),
-                                          );
-                                        },
-                                      );
-                                    },
-                                  ),
-                          ),
+                        if (confirmadasVisiveis.isNotEmpty) ...[
+                          const SizedBox(height: 12),
+                          _secaoConfirmados(),
                         ],
-                      ),
+
+                        if (meusDias.isNotEmpty) ...[
+                          const SizedBox(height: 12),
+                          _secaoPendentes(),
+                        ],
+
+                        const SizedBox(height: 22),
+
+                        const Text(
+                          'Dias disponíveis',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+
+                        if (vagas.isEmpty)
+                          const Padding(
+                            padding: EdgeInsets.all(20),
+                            child: Center(
+                              child: Text(
+                                'Nenhuma vaga encontrada para o mês aberto.',
+                              ),
+                            ),
+                          )
+                        else
+                          ...vagas.map(
+                            (vaga) => construirCartaoVaga(vaga),
+                          ),
+                      ],
                     ),
                   ),
-                  const SizedBox(height: 20),
-                  Expanded(
-                    child: desktop
-                        ? GridView.builder(
-                            gridDelegate:
-                                const SliverGridDelegateWithFixedCrossAxisCount(
-                              crossAxisCount: 2,
-                              childAspectRatio: 1.7,
-                              crossAxisSpacing: 15,
-                              mainAxisSpacing: 15,
-                            ),
-                            itemCount: vagas.length,
-                            itemBuilder: montarCard,
-                          )
-                        : ListView.builder(
-                            itemCount: vagas.length,
-                            itemBuilder: montarCard,
-                          ),
-                  ),
-                  const SizedBox(height: 10),
-                  Padding(
-                    padding: EdgeInsets.only(
-                      bottom:
-                          MediaQuery.of(context).padding.bottom + 10,
+                ),
+
+                SafeArea(
+                  top: false,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(
+                      15,
+                      0,
+                      15,
+                      15,
                     ),
                     child: SizedBox(
                       width: double.infinity,
-                      height: 60,
+                      height: 55,
                       child: ElevatedButton(
-                        onPressed: (salvando || saindo)
-                            ? null
-                            : salvarEscolhas,
-                        child: salvando
+                        onPressed:
+                            enviando ? null : confirmarPlantao,
+                        child: enviando
                             ? const SizedBox(
-                                height: 30,
-                                width: 30,
-                                child: CircularProgressIndicator(),
+                                width: 24,
+                                height: 24,
+                                child:
+                                    CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
                               )
-                            : const Text(
-                                'SALVAR ALTERAÇÕES',
-                              ),
+                            : const Text('CONFIRMAR PLANTÕES'),
                       ),
                     ),
                   ),
-                ],
-              ),
-            ),
-    );
-  }
-
-  // ===================================================
-  // CARD DA VAGA
-  // ===================================================
-
-  Widget montarCard(
-    BuildContext context,
-    int i,
-  ) {
-    final vaga = vagas[i];
-
-    final data = vaga['data'].toString();
-
-    final restantesDia =
-        int.tryParse(
-              vaga['restantesDia'].toString(),
-            ) ??
-            0;
-
-    final restantesNoite =
-        int.tryParse(
-              vaga['restantesNoite'].toString(),
-            ) ??
-            0;
-
-    final possuiNoite =
-        vaga['possuiNoite']
-                .toString()
-                .toLowerCase() ==
-            'true';
-
-    final marcadoDia = selecionados.any(
-      (e) =>
-          e['data'] == data &&
-          e['turno'] == 'DIA',
-    );
-
-    final marcadoNoite = selecionados.any(
-      (e) =>
-          e['data'] == data &&
-          e['turno'] == 'NOITE',
-    );
-
-    return Card(
-      color: Colors.white10,
-      child: Padding(
-        padding: const EdgeInsets.all(15),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              data,
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            CheckboxListTile(
-              dense: true,
-              contentPadding: EdgeInsets.zero,
-              value: marcadoDia,
-              title: Text(
-                restantesDia <= 0 && !marcadoDia
-                    ? 'DIA - ESGOTADO'
-                    : 'DIA - Restantes: $restantesDia',
-              ),
-              onChanged: restantesDia <= 0 && !marcadoDia
-                  ? null
-                  : (_) {
-                      selecionar(data, 'DIA');
-                    },
-            ),
-            if (possuiNoite)
-              CheckboxListTile(
-                dense: true,
-                contentPadding: EdgeInsets.zero,
-                value: marcadoNoite,
-                title: Text(
-                  restantesNoite <= 0 && !marcadoNoite
-                      ? 'NOITE - ESGOTADO'
-                      : 'NOITE - Restantes: $restantesNoite',
                 ),
-                onChanged: restantesNoite <= 0 && !marcadoNoite
-                    ? null
-                    : (_) {
-                        selecionar(data, 'NOITE');
-                      },
-              ),
-          ],
-        ),
-      ),
+              ],
+            ),
     );
   }
 }

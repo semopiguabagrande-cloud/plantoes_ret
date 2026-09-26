@@ -3,25 +3,30 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'platform/windows_initializer.dart';
-import 'screens/splash_login_screen.dart';
+import 'screens/login_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
- if (!kIsWeb &&
-    defaultTargetPlatform == TargetPlatform.windows) {
-  await initializeWindows();
-}
+  // ===================================================
+  // WINDOWS
+  // ===================================================
 
-  /// CELULAR
-if (!kIsWeb &&
-    (defaultTargetPlatform == TargetPlatform.android ||
-     defaultTargetPlatform == TargetPlatform.iOS)) {
-    await SystemChrome
-        .setPreferredOrientations(
+  if (!kIsWeb &&
+      defaultTargetPlatform == TargetPlatform.windows) {
+    await initializeWindows();
+  }
+
+  // ===================================================
+  // CELULAR (retrato)
+  // ===================================================
+
+  if (!kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.android ||
+          defaultTargetPlatform == TargetPlatform.iOS)) {
+    await SystemChrome.setPreferredOrientations(
       [
-        DeviceOrientation
-            .portraitUp,
+        DeviceOrientation.portraitUp,
       ],
     );
   }
@@ -31,8 +36,7 @@ if (!kIsWeb &&
   );
 }
 
-class PlantaoRET
-    extends StatelessWidget {
+class PlantaoRET extends StatelessWidget {
   const PlantaoRET({
     super.key,
   });
@@ -42,109 +46,83 @@ class PlantaoRET
     BuildContext context,
   ) {
     return MaterialApp(
-      debugShowCheckedModeBanner:
-          false,
+      debugShowCheckedModeBanner: false,
 
       title: 'Plantões RET',
 
       theme: ThemeData(
         useMaterial3: true,
 
-        brightness:
-            Brightness.dark,
+        brightness: Brightness.dark,
 
         fontFamily: 'Roboto',
 
-        scaffoldBackgroundColor:
-            const Color(
+        scaffoldBackgroundColor: const Color(
           0xFF020B1F,
         ),
 
-        colorScheme:
-            ColorScheme.fromSeed(
-          seedColor:
-              const Color(
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color(
             0xFF00AEEF,
           ),
-          brightness:
-              Brightness.dark,
+          brightness: Brightness.dark,
         ),
 
-        appBarTheme:
-            const AppBarTheme(
-          backgroundColor:
-              Color(
+        appBarTheme: const AppBarTheme(
+          backgroundColor: Color(
             0xFF02122D,
           ),
           elevation: 0,
           centerTitle: true,
-          foregroundColor:
-              Colors.white,
+          foregroundColor: Colors.white,
         ),
 
-       cardTheme:
-    CardThemeData(
-  color: const Color(
-    0xFF0A1832,
-  ),
-  elevation: 5,
-  shape:
-      RoundedRectangleBorder(
-    borderRadius:
-        BorderRadius.circular(
-      18,
-    ),
-  ),
-),
-        inputDecorationTheme:
-            InputDecorationTheme(
+        cardTheme: CardThemeData(
+          color: const Color(
+            0xFF0A1832,
+          ),
+          elevation: 5,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(
+              18,
+            ),
+          ),
+        ),
+
+        inputDecorationTheme: InputDecorationTheme(
           filled: true,
 
-          fillColor:
-              Colors.white
-                  .withValues(
+          fillColor: Colors.white.withValues(
             alpha: 0.06,
           ),
 
-          contentPadding:
-              const EdgeInsets.symmetric(
+          contentPadding: const EdgeInsets.symmetric(
             horizontal: 20,
             vertical: 18,
           ),
 
-          border:
-              OutlineInputBorder(
-            borderRadius:
-                BorderRadius.circular(
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(
               18,
             ),
-            borderSide:
-                BorderSide.none,
+            borderSide: BorderSide.none,
           ),
 
-          enabledBorder:
-              OutlineInputBorder(
-            borderRadius:
-                BorderRadius.circular(
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(
               18,
             ),
-            borderSide:
-                const BorderSide(
-              color:
-                  Colors.white24,
+            borderSide: const BorderSide(
+              color: Colors.white24,
             ),
           ),
 
-          focusedBorder:
-              OutlineInputBorder(
-            borderRadius:
-                BorderRadius.circular(
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(
               18,
             ),
-            borderSide:
-                const BorderSide(
-              color:
-                  Color(
+            borderSide: const BorderSide(
+              color: Color(
                 0xFF00C8FF,
               ),
               width: 1.5,
@@ -152,104 +130,83 @@ class PlantaoRET
           ),
         ),
 
-        elevatedButtonTheme:
-            ElevatedButtonThemeData(
-          style:
-              ElevatedButton.styleFrom(
-            backgroundColor:
-                const Color(
+        elevatedButtonTheme: ElevatedButtonThemeData(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: const Color(
               0xFF0A84FF,
             ),
 
-            foregroundColor:
-                Colors.white,
+            foregroundColor: Colors.white,
 
             elevation: 8,
 
-            minimumSize:
-                const Size(
+            minimumSize: const Size(
               double.infinity,
               58,
             ),
 
-            shape:
-                RoundedRectangleBorder(
-              borderRadius:
-                  BorderRadius.circular(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(
                 18,
               ),
             ),
 
-            textStyle:
-                const TextStyle(
+            textStyle: const TextStyle(
               fontSize: 17,
-              fontWeight:
-                  FontWeight.bold,
+              fontWeight: FontWeight.bold,
             ),
           ),
         ),
 
-        snackBarTheme:
-            SnackBarThemeData(
-          behavior:
-              SnackBarBehavior
-                  .floating,
+        snackBarTheme: SnackBarThemeData(
+          behavior: SnackBarBehavior.floating,
 
-          backgroundColor:
-              Colors.blueGrey
-                  .shade900,
+          backgroundColor: Colors.blueGrey.shade900,
 
-          shape:
-              RoundedRectangleBorder(
-            borderRadius:
-                BorderRadius.circular(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(
               14,
             ),
           ),
         ),
 
-        progressIndicatorTheme:
-            const ProgressIndicatorThemeData(
-          color:
-              Color(
+        progressIndicatorTheme: const ProgressIndicatorThemeData(
+          color: Color(
             0xFF00C8FF,
           ),
         ),
 
-        checkboxTheme:
-            CheckboxThemeData(
-          shape:
-              RoundedRectangleBorder(
-            borderRadius:
-                BorderRadius.circular(
+        checkboxTheme: CheckboxThemeData(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(
               5,
             ),
           ),
         ),
 
-        chipTheme:
-            ChipThemeData(
-          backgroundColor:
-              Colors.white10,
-          selectedColor:
-              Colors.blue,
-          labelStyle:
-              const TextStyle(
-            color:
-                Colors.white,
+        chipTheme: ChipThemeData(
+          backgroundColor: Colors.white10,
+          selectedColor: Colors.blue,
+          labelStyle: const TextStyle(
+            color: Colors.white,
           ),
-          shape:
-              RoundedRectangleBorder(
-            borderRadius:
-                BorderRadius.circular(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(
               12,
             ),
           ),
         ),
       ),
 
-      home:
-          const SplashLoginScreen(),
+      // =================================================
+      // TELA INICIAL
+      //
+      // O LoginScreen já faz o papel do antigo
+      // SplashLoginScreen: mostra o fundo, recupera a
+      // sessão salva e exibe o card de login.
+      // =================================================
+
+      home: const LoginScreen(),
     );
   }
 }
