@@ -129,6 +129,7 @@ class _AvisoScreenState extends State<AvisoScreen> {
                                 matricula:
                                     (widget.agente['matricula'] ?? '')
                                         .toString(),
+                                ferias: widget.agente['ferias'] == true,
                               ),
                             ),
                           );

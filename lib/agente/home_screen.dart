@@ -25,10 +25,6 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen>
     with WidgetsBindingObserver {
-  // ===================================================
-  // MÊS ABERTO (vem do servidor / planilha CONFIG)
-  // ===================================================
-
   String mesAberto = '';
 
   List<dynamic> vagas = [];
@@ -43,7 +39,10 @@ class _HomeScreenState extends State<HomeScreen>
 
   Timer? _heartbeat;
 
-  int get limitePlantao => widget.ferias ? 10 : 8;
+  // Férias vem do servidor (sempre atualizado).
+  bool _ferias = false;
+
+  int get limitePlantao => _ferias ? 10 : 8;
 
   List<Map<String, dynamic>> get confirmadasVisiveis {
     final lista = List<Map<String, dynamic>>.from(confirmadas);
@@ -172,7 +171,7 @@ class _HomeScreenState extends State<HomeScreen>
       SnackBar(
         backgroundColor: Colors.red.shade700,
         behavior: SnackBarBehavior.floating,
-        duration: const Duration(seconds: 5),
+        duration: const Duration(seconds: 6),
         content: Row(
           children: [
             const Icon(
@@ -291,6 +290,17 @@ class _HomeScreenState extends State<HomeScreen>
         final vagasLista = resultado['vagas'];
         final minhasLista = resultado['minhas'];
 
+        // Férias — lê do servidor.
+        final agenteResp = resultado['agente'];
+
+        if (agenteResp is Map) {
+          _ferias = _lerFerias(agenteResp['ferias']);
+        }
+
+        debugPrint(
+          'Férias do agente: $_ferias → limite $limitePlantao',
+        );
+
         setState(() {
           mesAberto = (resultado['mesAberto'] ?? '').toString();
 
@@ -308,6 +318,18 @@ class _HomeScreenState extends State<HomeScreen>
                 }).toList()
               : [];
 
+          if (mesAberto.isEmpty) {
+            if (vagas.isNotEmpty) {
+              mesAberto = _mesDaData(
+                normalizarData(vagas.first['data']),
+              );
+            } else if (confirmadas.isNotEmpty) {
+              mesAberto = _mesDaData(
+                confirmadas.first['data']?.toString() ?? '',
+              );
+            }
+          }
+
           _carregandoInicial = false;
         });
 
@@ -316,6 +338,14 @@ class _HomeScreenState extends State<HomeScreen>
         debugPrint('Vagas: ${vagas.length}');
         debugPrint('Confirmadas: ${confirmadas.length}');
         debugPrint('============');
+
+        // =================================================
+        // RECONCILIA A SELEÇÃO
+        //
+        // Desmarca automaticamente qualquer dia "A confirmar"
+        // que já não tenha vaga (ou que já foi confirmado).
+        // =================================================
+        _reconciliarSelecao();
 
         return;
       }
@@ -334,8 +364,107 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   // ===================================================
+  // RECONCILIAÇÃO DA SELEÇÃO
+  //
+  // Remove de "A confirmar" os dias que:
+  //   - já não têm vaga; ou
+  //   - já estão confirmados.
+  //
+  // É isso que desmarca automaticamente o dia que o
+  // agente perdeu na corrida.
+  // ===================================================
+
+  void _reconciliarSelecao() {
+    if (!mounted || meusDias.isEmpty) return;
+
+    final remover = <String>[];
+
+    for (final item in meusDias) {
+      final data = item['data'].toString();
+      final turno = item['turno'].toString();
+
+      final chave = '$data|$turno';
+
+      // Já confirmado por este agente?
+      if (_confirmadaDoDia(data) != null) {
+        remover.add(chave);
+        continue;
+      }
+
+      final vaga = _vagaDoDia(data);
+
+      // Dia sumiu da lista de vagas?
+      if (vaga == null) {
+        remover.add(chave);
+        continue;
+      }
+
+      // Sem vaga no turno escolhido?
+      if (_restantesDoTurno(vaga, turno) <= 0) {
+        remover.add(chave);
+      }
+    }
+
+    if (remover.isNotEmpty) {
+      debugPrint('Reconciliação: removendo $remover');
+
+      setState(() {
+        meusDias.removeWhere(
+          (m) => remover.contains('${m['data']}|${m['turno']}'),
+        );
+      });
+    }
+  }
+
+  // ===================================================
   // HELPERS
   // ===================================================
+
+  Map<String, dynamic>? _vagaDoDia(String data) {
+    for (final v in vagas) {
+      if (normalizarData(v['data']) == data) {
+        return Map<String, dynamic>.from(v);
+      }
+    }
+    return null;
+  }
+
+  int _restantesDoTurno(
+    Map<String, dynamic> vaga,
+    String turno,
+  ) {
+    final t = turno.toUpperCase();
+
+    if (t == 'NOITE') {
+      return int.tryParse(
+            vaga['restantesNoite']?.toString() ?? '',
+          ) ??
+          0;
+    }
+
+    return int.tryParse(
+          vaga['restantesDia']?.toString() ?? '',
+        ) ??
+        0;
+  }
+
+  // Aceita true, "SIM", "TRUE".
+  bool _lerFerias(dynamic valor) {
+    if (valor == true) return true;
+
+    final t = valor.toString().trim().toUpperCase();
+
+    return t == 'SIM' || t == 'TRUE';
+  }
+
+  // "dd/MM/yyyy" → "yyyy-MM"
+  String _mesDaData(String data) {
+    final partes = data.split('/');
+
+    if (partes.length != 3) return '';
+
+    return '${partes[2]}-${partes[1]}';
+  }
 
   String _formatarMesAberto(String chave) {
     if (chave.length < 7) return chave;
@@ -526,13 +655,38 @@ class _HomeScreenState extends State<HomeScreen>
       final sucesso = resposta['success'] == true ||
           resposta['sucesso'] == true;
 
+      // =================================================
+      // FALHOU (ex.: perdeu a corrida da última vaga)
+      // =================================================
+
       if (!sucesso) {
+        // Se o servidor indicar QUAL dia falhou, desmarca
+        // ele imediatamente para o usuário ver na hora.
+        final dataConflito =
+            (resposta['data'] ?? '').toString().trim();
+
+        if (dataConflito.isNotEmpty) {
+          setState(() {
+            meusDias.removeWhere(
+              (item) => item['data'] == dataConflito,
+            );
+          });
+        }
+
         _mostrarErro(
           resposta['mensagem']?.toString() ??
               'Não foi possível salvar a inscrição.',
         );
+
+        // Recarrega as vagas e RECONCILIA (desmarca o que
+        // ficou sem vaga — inclusive sem o campo "data").
+        await carregarTudo(silencioso: true);
         return;
       }
+
+      // =================================================
+      // SUCESSO
+      // =================================================
 
       _mostrarSucesso(
         resposta['mensagem']?.toString() ??
@@ -670,9 +824,20 @@ class _HomeScreenState extends State<HomeScreen>
     );
   }
 
-  // ===================================================
-  // BANNER DO MÊS ABERTO
-  // ===================================================
+  Widget _chipsHorizontal({
+    required List<Widget> chips,
+    double altura = 40,
+  }) {
+    return SizedBox(
+      height: altura,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: chips.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 8),
+        itemBuilder: (_, i) => chips[i],
+      ),
+    );
+  }
 
   Widget _bannerMesAberto() {
     final definido = mesAberto.isNotEmpty;
@@ -749,9 +914,11 @@ class _HomeScreenState extends State<HomeScreen>
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'Plantões escolhidos',
-                  style: TextStyle(fontWeight: FontWeight.bold),
+                Text(
+                  _ferias
+                      ? 'Plantões escolhidos (FÉRIAS)'
+                      : 'Plantões escolhidos',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
                 if (atingiu)
                   const Padding(
@@ -786,6 +953,26 @@ class _HomeScreenState extends State<HomeScreen>
   Widget _secaoConfirmados() {
     final lista = confirmadasVisiveis;
 
+    final chips = lista.map((e) {
+      final data = e['data'].toString();
+      final turno = e['turno'].toString();
+
+      return Chip(
+        visualDensity: VisualDensity.compact,
+        avatar: const Icon(
+          Icons.event_available,
+          size: 18,
+          color: Colors.greenAccent,
+        ),
+        label: Text('$data · ${_rotuloTurno(turno)}'),
+        backgroundColor: Colors.white10,
+        deleteIconColor: Colors.redAccent,
+        onDeleted: enviando
+            ? null
+            : () => _cancelarPlantao(data, turno),
+      );
+    }).toList();
+
     return Card(
       color: Colors.green.withValues(alpha: 0.10),
       child: Padding(
@@ -808,39 +995,24 @@ class _HomeScreenState extends State<HomeScreen>
                     color: Colors.greenAccent,
                   ),
                 ),
+                const Spacer(),
+                const Icon(
+                  Icons.swipe,
+                  size: 16,
+                  color: Colors.white38,
+                ),
               ],
             ),
             const SizedBox(height: 4),
             const Text(
-              'Toque no X de um dia para cancelar.',
+              'Deslize para o lado · toque no X para cancelar.',
               style: TextStyle(
                 fontSize: 12,
                 color: Colors.white54,
               ),
             ),
             const SizedBox(height: 10),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: lista.map((e) {
-                final data = e['data'].toString();
-                final turno = e['turno'].toString();
-
-                return Chip(
-                  avatar: const Icon(
-                    Icons.event_available,
-                    size: 18,
-                    color: Colors.greenAccent,
-                  ),
-                  label: Text('$data · ${_rotuloTurno(turno)}'),
-                  backgroundColor: Colors.white10,
-                  deleteIconColor: Colors.redAccent,
-                  onDeleted: enviando
-                      ? null
-                      : () => _cancelarPlantao(data, turno),
-                );
-              }).toList(),
-            ),
+            _chipsHorizontal(chips: chips),
           ],
         ),
       ),
@@ -848,6 +1020,27 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   Widget _secaoPendentes() {
+    final chips = meusDias.map((e) {
+      return Chip(
+        visualDensity: VisualDensity.compact,
+        label: Text(
+          '${e['data']} · ${_rotuloTurno(e['turno']?.toString() ?? 'DIA')}',
+        ),
+        backgroundColor: Colors.white10,
+        onDeleted: enviando
+            ? null
+            : () {
+                setState(() {
+                  meusDias.removeWhere(
+                    (item) =>
+                        item['data'] == e['data'] &&
+                        item['turno'] == e['turno'],
+                  );
+                });
+              },
+      );
+    }).toList();
+
     return Card(
       color: Colors.amber.withValues(alpha: 0.08),
       child: Padding(
@@ -870,32 +1063,16 @@ class _HomeScreenState extends State<HomeScreen>
                     color: Colors.amberAccent,
                   ),
                 ),
+                const Spacer(),
+                const Icon(
+                  Icons.swipe,
+                  size: 16,
+                  color: Colors.white38,
+                ),
               ],
             ),
             const SizedBox(height: 10),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: meusDias.map((e) {
-                return Chip(
-                  label: Text(
-                    '${e['data']} · ${_rotuloTurno(e['turno']?.toString() ?? 'DIA')}',
-                  ),
-                  backgroundColor: Colors.white10,
-                  onDeleted: enviando
-                      ? null
-                      : () {
-                          setState(() {
-                            meusDias.removeWhere(
-                              (item) =>
-                                  item['data'] == e['data'] &&
-                                  item['turno'] == e['turno'],
-                            );
-                          });
-                        },
-                );
-              }).toList(),
-            ),
+            _chipsHorizontal(chips: chips),
           ],
         ),
       ),
